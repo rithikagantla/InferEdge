@@ -1,0 +1,27 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      INFERENCE_MODE: ${INFERENCE_MODE:-mock}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      NVIDIA_NIM_MODEL: ${NVIDIA_NIM_MODEL:-nvidia/llama-3.1-nemotron-70b-instruct}
+    volumes:
+      - inferedge-data:/srv/inferedge/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  inferedge-data:
