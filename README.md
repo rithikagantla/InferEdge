@@ -176,9 +176,3 @@ frontend/                 React + TypeScript + Vite dashboard
 scripts/run_benchmark.py  benchmark CLI (JSON/CSV output + summary table)
 docker-compose.yml        backend + dashboard
 ```
-
-## Resume bullets
-
-- Built **InferEdge**, a GPU-optimized LLM inference platform using **Python, FastAPI, React, Docker, NVIDIA NIM/Nemotron, and CUDA** to benchmark real-time AI agent serving performance.
-- Implemented inference optimization experiments across **batching, prompt caching, semantic routing, and cost-per-token analysis**, measuring tokens/sec, time-to-first-token, p95 latency, GPU memory usage, and estimated cost per 1M tokens.
-- Developed a **CUDA-accelerated semantic router** to classify and route customer-support queries across model tiers, comparing CPU vs GPU similarity scoring under concurrent load tests.
