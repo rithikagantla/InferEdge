@@ -4,6 +4,18 @@ InferEdge is a full-stack platform for **benchmarking LLM inference optimization
 
 It runs entirely locally in **mock mode** (no GPU, no API key), and flips to real **NVIDIA NIM / Nemotron** inference with one environment variable.
 
+## Read this first: where the numbers come from
+
+InferEdge is a **benchmarking harness**, and it has two sources of numbers:
+
+- **Simulated serving profile (mock mode).** The headline comparison numbers below come from a simulator. Each model tier has a time-to-first-token and a per-token decode rate modeled on 8B-class and 70B-class GPU serving. That let me compare optimization strategies cheaply and reproducibly, with no GPU bill and no rate limits. The *ratios* between strategies are the point; the absolute milliseconds are the simulator's assumptions, not measurements of real hardware.
+- **Real hosted inference (NIM mode).** The same harness runs unchanged against NVIDIA's hosted NIM endpoints: Llama 3.1 Nemotron 70B for the large tier and Mistral-NeMo-Minitron 8B for the small tier. Responses are streamed, so time-to-first-token is measured from the first content chunk rather than estimated.
+
+Two more things to know when reading the results:
+
+- **Costs are estimates.** They use assumed per-token list prices (see `MODEL_TIERS` in `backend/app/config.py`). The free build.nvidia.com tier charges nothing.
+- **Some paths are not exercised on every machine.** `quantized` is simulator-only, and the API refuses it in NIM mode because hosted NIM has no quantization toggle. The router's CUDA path (CuPy) needs an NVIDIA GPU; on a machine without one, the router benchmark reports CPU fallback timings only.
+
 ## Architecture
 
 ```mermaid
@@ -50,7 +62,7 @@ flowchart LR
 | `routing` | Semantic router sends easy intents to a small model | ~60% cost reduction, ~2.8x p50 speedup |
 | `quantized` | Simulated INT8/FP8 serving profile | Placeholder for a TensorRT-LLM quantized engine |
 
-Measured on this machine, mock mode, 50 prompts (`scripts/run_benchmark.py`):
+Simulated serving profile (mock mode), 50 prompts (`scripts/run_benchmark.py`):
 
 ```
 mode        reqs  wall(s)   req/s  p50(ms)  p95(ms)  ttft(ms)    tok/s    $/1M tok  cache
@@ -104,15 +116,22 @@ docker compose up --build
 ## Using real NVIDIA NIM / Nemotron inference
 
 1. Get a free API key at [build.nvidia.com](https://build.nvidia.com).
-2. `cp .env.example .env` and set:
+2. `cp .env.example .env` and set (the backend reads `.env` on startup; real environment variables take precedence):
 
 ```bash
 INFERENCE_MODE=nim
 NVIDIA_API_KEY=nvapi-...
 NVIDIA_NIM_MODEL=nvidia/llama-3.1-nemotron-70b-instruct
+NVIDIA_NIM_SMALL_MODEL=nvidia/mistral-nemo-minitron-8b-8k-instruct
 ```
 
-Routed "small-tier" traffic goes to `meta/llama-3.1-8b-instruct`; everything else hits the Nemotron model. The same metrics, benchmarks, and dashboard work unchanged.
+3. Restart the backend and run the benchmark (`quantized` is skipped automatically in NIM mode):
+
+```bash
+backend/.venv/bin/python scripts/run_benchmark.py --num-prompts 50
+```
+
+Routed small-tier traffic goes to Mistral-NeMo-Minitron 8B, NVIDIA's pruned and distilled 8B model; everything else goes to Nemotron 70B. The metrics, benchmarks, and dashboard work unchanged. The NIM client is built for the free tier's rate limits: it caps in-flight requests (`NIM_MAX_CONCURRENCY`, default 4) and retries 429/5xx responses with exponential backoff.
 
 ## The CUDA semantic router
 
@@ -171,7 +190,8 @@ backend/
       prompt_cache.py     LRU response cache
     routing/
       semantic_router.py  CUDA (CuPy) / CPU (NumPy) intent router
-  tests/test_api.py       13 API + router tests
+  tests/test_api.py       API + router tests (mock mode)
+  tests/test_nim_engine.py  NIM client tests: streaming TTFT, retries, fallbacks
 frontend/                 React + TypeScript + Vite dashboard
 scripts/run_benchmark.py  benchmark CLI (JSON/CSV output + summary table)
 docker-compose.yml        backend + dashboard

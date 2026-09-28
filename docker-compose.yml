@@ -7,6 +7,7 @@ services:
       INFERENCE_MODE: ${INFERENCE_MODE:-mock}
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
       NVIDIA_NIM_MODEL: ${NVIDIA_NIM_MODEL:-nvidia/llama-3.1-nemotron-70b-instruct}
+      NVIDIA_NIM_SMALL_MODEL: ${NVIDIA_NIM_SMALL_MODEL:-nvidia/mistral-nemo-minitron-8b-8k-instruct}
     volumes:
       - inferedge-data:/srv/inferedge/data
     healthcheck:

@@ -75,6 +75,10 @@ async def health() -> dict:
 async def chat(req: ChatRequest) -> ChatResponse:
     if req.mode not in OPTIMIZATION_MODES:
         raise HTTPException(422, "mode must be one of %s" % OPTIMIZATION_MODES)
+    if req.mode in benchmark_runner.MOCK_ONLY_MODES and config.INFERENCE_MODE != "mock":
+        raise HTTPException(
+            422, "mode %r is simulated and only available with INFERENCE_MODE=mock" % req.mode
+        )
     try:
         return await service.chat(req.prompt, mode=req.mode)
     except NotImplementedError as exc:

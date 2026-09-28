@@ -94,10 +94,9 @@ async def chat(prompt: str, mode: str = "baseline", record: bool = True) -> Chat
         )
 
     elif mode == "quantized":
-        # Placeholder profile: in mock mode this uses a faster serving
-        # profile simulating an INT8/FP8 TensorRT-LLM engine; in nim mode
-        # it currently behaves like baseline (hosted NIM does not expose
-        # a quantization toggle). See README "Where TensorRT-LLM fits".
+        # Mock-only: a faster serving profile simulating an INT8/FP8
+        # TensorRT-LLM engine. The API rejects this mode outside mock
+        # because hosted NIM exposes no quantization toggle.
         result = await engine.generate(prompt, "quantized")
         metrics = _build_metrics(result, mode)
 

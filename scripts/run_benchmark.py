@@ -18,6 +18,7 @@ import csv
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -89,6 +90,23 @@ def print_table(results: list) -> None:
             )
 
 
+def markdown_table(results: list) -> str:
+    lines = [
+        "| Mode | Req/s | p50 latency (ms) | p95 latency (ms) | Avg TTFT (ms) "
+        "| Output tok/s | $/1M tokens | Cache hit rate |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for r in results:
+        hit = r.get("cache_hit_rate")
+        lines.append(
+            f"| {r['mode']} | {r['requests_per_sec']:.2f} | {r['p50_latency_ms']:.0f} "
+            f"| {r['p95_latency_ms']:.0f} | {r['avg_ttft_ms']:.0f} "
+            f"| {r['avg_tokens_per_sec']:.0f} | {r['est_cost_per_1m_tokens']:.3f} "
+            f"| {'—' if hit is None else f'{hit * 100:.0f}%'} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="InferEdge benchmark runner")
     parser.add_argument("--base-url", default=DEFAULT_BASE_URL)
@@ -112,13 +130,27 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    print(f"Inference mode: {info['inference_mode']}  |  Router: {info['router_backend']}")
+    mode = info["inference_mode"]
+    print(f"Inference mode: {mode}  |  Router: {info['router_backend']}")
 
-    print("\nRunning inference benchmark (this can take a minute)...")
-    run = post_json(
-        args.base_url + "/benchmark/run",
-        {"num_prompts": args.num_prompts, "modes": args.modes},
-    )
+    modes = args.modes
+    if mode != "mock" and "quantized" in modes:
+        modes = [m for m in modes if m != "quantized"]
+        print("Skipping 'quantized': it is a simulated profile, only meaningful in mock mode.")
+
+    eta = "a minute" if mode == "mock" else "several minutes (hosted API, rate limited)"
+    print(f"\nRunning inference benchmark (this can take {eta})...")
+    started = time.perf_counter()
+    try:
+        run = post_json(
+            args.base_url + "/benchmark/run",
+            {"num_prompts": args.num_prompts, "modes": modes},
+        )
+    except urllib.error.HTTPError as exc:
+        print(f"\nERROR: benchmark failed — HTTP {exc.code}: {exc.read().decode()[:500]}",
+              file=sys.stderr)
+        return 1
+    print(f"Finished in {time.perf_counter() - started:.0f}s")
     print_table(run["results"])
 
     print(f"Running semantic-router CPU vs GPU benchmark ({args.router_intents} intents)...")
@@ -134,18 +166,18 @@ def main() -> int:
 
     os.makedirs(args.out_dir, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    json_path = os.path.join(args.out_dir, f"benchmark_{stamp}.json")
-    csv_path = os.path.join(args.out_dir, f"benchmark_{stamp}.csv")
+    base = os.path.join(args.out_dir, f"benchmark_{mode}_{stamp}")
 
-    with open(json_path, "w") as f:
+    with open(base + ".json", "w") as f:
         json.dump({"benchmark": run, "router_benchmark": router_bench}, f, indent=2)
-    with open(csv_path, "w", newline="") as f:
+    with open(base + ".csv", "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(run["results"])
+    with open(base + ".md", "w") as f:
+        f.write(markdown_table(run["results"]))
 
-    print(f"\nSaved: {json_path}")
-    print(f"Saved: {csv_path}")
+    print(f"\nSaved: {base}.json / .csv / .md")
     return 0
 
 

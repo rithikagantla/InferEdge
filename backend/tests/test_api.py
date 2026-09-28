@@ -160,6 +160,15 @@ def test_benchmark_run_and_results(client):
     assert saved["runs"][0]["num_prompts"] == 6
 
 
+def test_quantized_is_mock_only(client, monkeypatch):
+    from app import config
+
+    monkeypatch.setattr(config, "INFERENCE_MODE", "nim")
+    resp = client.post("/chat", json={"prompt": "hello there", "mode": "quantized"})
+    assert resp.status_code == 422
+    assert "only available with INFERENCE_MODE=mock" in resp.text
+
+
 def test_sample_prompts(client):
     data = client.get("/sample-prompts").json()
     assert len(data["prompts"]) >= 20

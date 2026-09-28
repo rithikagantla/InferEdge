@@ -32,6 +32,17 @@ MODE_NOTES = {
     "quantized": "Simulated INT8/FP8 profile — placeholder for a TensorRT-LLM quantized engine.",
 }
 
+# Against a hosted endpoint the server's batching is out of our hands, so
+# "batching" measures client-side concurrency (capped by NIM_MAX_CONCURRENCY).
+NIM_MODE_NOTES = {
+    "batching": "Batches of %d sent concurrently to hosted NIM (client-side concurrency; "
+    "server-side batching is NIM's)." % BATCH_SIZE,
+}
+
+# Modes that only mean something in the simulator: hosted NIM exposes no
+# quantization toggle, so a "quantized" row would just be baseline relabeled.
+MOCK_ONLY_MODES = {"quantized"}
+
 
 def _prompts_for(mode: str, n: int) -> List[str]:
     if mode == "caching":
@@ -66,7 +77,11 @@ def _aggregate(mode: str, responses: List[ChatResponse], wall_time_s: float) -> 
         cache_hit_rate=round(
             sum(1 for m in rows if m.cached) / len(rows), 3
         ) if mode == "caching" else None,
-        notes=MODE_NOTES.get(mode),
+        notes=(
+            NIM_MODE_NOTES.get(mode, MODE_NOTES.get(mode))
+            if config.INFERENCE_MODE == "nim"
+            else MODE_NOTES.get(mode)
+        ),
     )
 
 
@@ -93,6 +108,8 @@ async def run_benchmark(
     num_prompts: int = 20, modes: Optional[List[str]] = None
 ) -> BenchmarkResult:
     selected = [m for m in (modes or OPTIMIZATION_MODES) if m in OPTIMIZATION_MODES]
+    if config.INFERENCE_MODE != "mock":
+        selected = [m for m in selected if m not in MOCK_ONLY_MODES]
     if not selected:
         raise ValueError("no valid modes; choose from %s" % OPTIMIZATION_MODES)
 

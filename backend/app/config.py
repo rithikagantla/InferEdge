@@ -7,10 +7,42 @@ import os
 from dataclasses import dataclass
 from typing import Dict
 
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+
+def _load_dotenv(path: str) -> None:
+    """Minimal .env loader (KEY=VALUE lines) so a local uvicorn run picks
+    up the same file docker-compose uses. Real environment variables
+    always win over the file."""
+    if not os.path.isfile(path):
+        return
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            value = value.strip().strip('"').strip("'")
+            if value:
+                os.environ.setdefault(key.strip(), value)
+
+
+_load_dotenv(os.path.join(_REPO_ROOT, ".env"))
+
 INFERENCE_MODE = os.getenv("INFERENCE_MODE", "mock").lower()  # mock | nim | local
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
 NVIDIA_NIM_MODEL = os.getenv("NVIDIA_NIM_MODEL", "nvidia/llama-3.1-nemotron-70b-instruct")
+# Small tier for routed traffic. meta/llama-3.1-8b-instruct was removed from
+# the hosted catalog; Mistral-NeMo-Minitron 8B is NVIDIA's pruned + distilled
+# 8B model, so the small/large split stays roughly 8B vs 70B.
+NVIDIA_NIM_SMALL_MODEL = os.getenv(
+    "NVIDIA_NIM_SMALL_MODEL", "nvidia/mistral-nemo-minitron-8b-8k-instruct"
+)
 NVIDIA_NIM_BASE_URL = os.getenv("NVIDIA_NIM_BASE_URL", "https://integrate.api.nvidia.com/v1")
+# The free build.nvidia.com tier is rate limited, so cap in-flight requests
+# and retry 429/5xx with exponential backoff.
+NIM_MAX_CONCURRENCY = int(os.getenv("NIM_MAX_CONCURRENCY", "4"))
+NIM_MAX_RETRIES = int(os.getenv("NIM_MAX_RETRIES", "5"))
 
 DB_PATH = os.getenv("INFEREDGE_DB_PATH", os.path.join(os.path.dirname(__file__), "..", "data", "inferedge.db"))
 
@@ -37,7 +69,7 @@ class ModelTier:
 # "small" is what the semantic router sends easy intents to (e.g. an 8B
 # model); "large" handles hard/technical intents (e.g. Nemotron 70B).
 MODEL_TIERS: Dict[str, ModelTier] = {
-    "small": ModelTier("meta/llama-3.1-8b-instruct (simulated)", 0.06, 0.24),
+    "small": ModelTier(NVIDIA_NIM_SMALL_MODEL, 0.06, 0.24),
     "large": ModelTier(NVIDIA_NIM_MODEL, 0.35, 1.40),
     # Same weights as "large" but served through a (simulated) INT8/FP8
     # TensorRT-LLM engine: faster decode, same per-token API price.
