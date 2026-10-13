@@ -44,6 +44,15 @@ NVIDIA_NIM_BASE_URL = os.getenv("NVIDIA_NIM_BASE_URL", "https://integrate.api.nv
 NIM_MAX_CONCURRENCY = int(os.getenv("NIM_MAX_CONCURRENCY", "4"))
 NIM_MAX_RETRIES = int(os.getenv("NIM_MAX_RETRIES", "5"))
 
+# Self-hosted OpenAI-compatible server (vllm serve / trtllm-serve).
+LOCAL_BASE_URL = os.getenv("LOCAL_BASE_URL", "")
+LOCAL_MODEL = os.getenv("LOCAL_MODEL", "NousResearch/Meta-Llama-3-8B-Instruct")
+LOCAL_API_KEY = os.getenv("LOCAL_API_KEY", "")
+LOCAL_SMALL_BASE_URL = os.getenv("LOCAL_SMALL_BASE_URL", "")
+LOCAL_SMALL_MODEL = os.getenv("LOCAL_SMALL_MODEL", "")
+# A self-hosted GPU has no rate limit; the server batches everything sent.
+LOCAL_MAX_CONCURRENCY = int(os.getenv("LOCAL_MAX_CONCURRENCY", "64"))
+
 DB_PATH = os.getenv("INFEREDGE_DB_PATH", os.path.join(os.path.dirname(__file__), "..", "data", "inferedge.db"))
 
 # Rolling window used by GET /metrics aggregations.

@@ -1,34 +1,66 @@
-"""Placeholder for a self-hosted local inference backend.
+"""Self-hosted engine: any OpenAI-compatible server you run yourself.
 
-Where the NVIDIA serving stack plugs in:
+Works with `vllm serve` and `trtllm-serve` (TensorRT-LLM), which both
+expose /v1/chat/completions. gpu/modal_vllm.py and gpu/modal_trtllm.py
+start these servers on a cloud GPU; `modal serve gpu/modal_vllm.py`
+prints a URL to put in LOCAL_BASE_URL.
 
-  * vLLM            — point an OpenAI-compatible client at
-                      http://localhost:8001/v1 (vllm serve <model>).
-                      Continuous batching and prefix caching come free.
-  * TensorRT-LLM    — compile the model to a TRT engine for the target
-                      GPU; serve via Triton's trtllm backend. This is
-                      where INT8/FP8 quantization and speculative
-                      decoding (draft model or Medusa heads) land.
-  * Triton / Dynamo — production serving: dynamic batching config,
-                      model ensembles, multi-GPU scheduling, KV-cache
-                      aware routing (NVIDIA Dynamo).
-
-Implementing any of these is intentionally out of scope for the MVP;
-this class documents the seam so the rest of the platform (metrics,
-benchmarks, dashboard) needs zero changes when a real backend arrives.
+Environment:
+  LOCAL_BASE_URL        — e.g. http://localhost:8001/v1
+  LOCAL_MODEL           — model name the server was started with
+  LOCAL_API_KEY         — optional, if the server was started with one
+  LOCAL_SMALL_BASE_URL  — optional second server for routed small-tier
+  LOCAL_SMALL_MODEL       traffic; without it both tiers hit LOCAL_MODEL,
+                          so routing changes nothing in local mode
 """
-from .engine import InferenceEngine, InferenceResult
+from typing import Optional
+
+import httpx
+
+from .. import config
+from .openai_compat import OpenAICompatEngine
 
 
-class LocalEngine(InferenceEngine):
+class LocalEngine(OpenAICompatEngine):
     name = "local"
+    auth_hint = "check LOCAL_API_KEY"
 
-    def __init__(self) -> None:
-        raise NotImplementedError(
-            "INFERENCE_MODE=local is a placeholder for vLLM / TensorRT-LLM / "
-            "Triton. Use INFERENCE_MODE=mock (no deps) or INFERENCE_MODE=nim "
-            "(hosted NVIDIA endpoint). See local_engine.py for integration notes."
-        )
+    def __init__(self, transport: Optional[httpx.AsyncBaseTransport] = None) -> None:
+        if not config.LOCAL_BASE_URL:
+            raise RuntimeError(
+                "INFERENCE_MODE=local requires LOCAL_BASE_URL (an OpenAI-compatible "
+                "server such as `vllm serve` or `trtllm-serve`). See docs/SELF_HOSTED.md."
+            )
+        super().__init__(config.LOCAL_BASE_URL, config.LOCAL_API_KEY, transport)
+        self._small: Optional[OpenAICompatEngine] = None
+        if config.LOCAL_SMALL_BASE_URL:
+            self._small = _SingleModel(
+                config.LOCAL_SMALL_BASE_URL, config.LOCAL_SMALL_MODEL, config.LOCAL_API_KEY
+            )
 
-    async def generate(self, prompt: str, model_tier: str = "large") -> InferenceResult:
-        raise NotImplementedError
+    def model_for_tier(self, model_tier: str) -> str:
+        return config.LOCAL_MODEL
+
+    @property
+    def max_concurrency(self) -> int:
+        return config.LOCAL_MAX_CONCURRENCY
+
+    async def generate(self, prompt: str, model_tier: str = "large"):
+        if model_tier == "small" and self._small is not None:
+            return await self._small.generate(prompt, "small")
+        return await super().generate(prompt, model_tier)
+
+
+class _SingleModel(OpenAICompatEngine):
+    name = "local-small"
+
+    def __init__(self, base_url: str, model: str, api_key: str) -> None:
+        super().__init__(base_url, api_key)
+        self._model = model
+
+    def model_for_tier(self, model_tier: str) -> str:
+        return self._model
+
+    @property
+    def max_concurrency(self) -> int:
+        return config.LOCAL_MAX_CONCURRENCY

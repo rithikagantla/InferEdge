@@ -13,7 +13,7 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app import config  # noqa: E402
-from app.inference import nim_engine  # noqa: E402
+from app.inference import openai_compat  # noqa: E402
 from app.inference.nim_engine import NIMEngine, NIMError  # noqa: E402
 
 
@@ -35,7 +35,7 @@ USAGE_CHUNK = {"choices": [], "usage": {"prompt_tokens": 42, "completion_tokens"
 @pytest.fixture(autouse=True)
 def nim_config(monkeypatch):
     monkeypatch.setattr(config, "NVIDIA_API_KEY", "nvapi-test")
-    monkeypatch.setattr(nim_engine, "_BACKOFF_BASE_S", 0.001)
+    monkeypatch.setattr(openai_compat, "_BACKOFF_BASE_S", 0.001)
 
 
 def make_engine(handler):
