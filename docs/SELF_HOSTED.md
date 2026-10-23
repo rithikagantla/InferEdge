@@ -29,7 +29,7 @@ modal setup                                         # browser login
 ```bash
 modal run gpu/modal_vllm.py --smoke                 # ~5 min sanity check
 modal run gpu/modal_vllm.py --variants bf16,fp8     # vLLM sweeps
-modal run gpu/modal_trtllm.py --variants bf16,fp8   # TensorRT-LLM: builds engines on first run
+modal run gpu/modal_trtllm.py --variants bf16,fp8,pytorch-bf16  # TensorRT-LLM: builds engines on first run
 modal run gpu/modal_router.py                       # semantic router: CPU vs GPU (CuPy) scoring
 backend/.venv/bin/pip install -r scripts/requirements.txt
 backend/.venv/bin/python scripts/plot_sweep.py benchmark_results/gpu/sweep_*-L4.json
@@ -57,5 +57,5 @@ LOCAL_MODEL=NousResearch/Meta-Llama-3-8B-Instruct
 
 - **Model:** `NousResearch/Meta-Llama-3-8B-Instruct` at revision `53346005`, an ungated copy of Meta's Llama 3 8B Instruct, so no Hugging Face token is needed.
 - **vLLM 0.21.0:** the version pinned in Modal's maintained example.
-- **TensorRT-LLM 0.20.0:** the version from Modal's TensorRT-LLM example, retargeted from H100 to L4. See [TENSORRT_LLM.md](TENSORRT_LLM.md).
+- **TensorRT-LLM 1.2.1:** NVIDIA's prebuilt `nvcr.io/nvidia/tensorrt-llm/release:1.2.1` container from NGC. The 0.20.0 version in Modal's original example can no longer be pip-installed. See [TENSORRT_LLM.md](TENSORRT_LLM.md).
 - **GPU:** one NVIDIA L4 (Ada Lovelace, 24 GB, about 300 GB/s memory bandwidth, native FP8 tensor cores).

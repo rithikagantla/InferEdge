@@ -54,9 +54,14 @@ def panel(ax, sweeps, x_key, x_label):
         ys = [lv["output_tokens_per_sec"] for lv in sw["levels"]]
         ax.plot(xs, ys, color=color, linewidth=2, marker=marker, markersize=7,
                 markeredgecolor="white", markeredgewidth=1.5, label=sw["label"], zorder=3)
-        # Label every concurrency level when there are few; otherwise the
-        # ends and the middle, so labels don't pile up.
-        picks = set(range(len(xs))) if len(xs) <= 5 else {0, len(xs) // 2, len(xs) - 1}
+        # Label every concurrency level when there are few points; with many
+        # series only the top level, since the low levels bunch together.
+        if len(sweeps) > 4:
+            picks = set()  # the footnote says which end is which
+        elif len(sweeps) > 3:
+            picks = {len(xs) - 1}
+        else:
+            picks = set(range(len(xs))) if len(xs) <= 5 else {0, len(xs) // 2, len(xs) - 1}
         for j, lv in enumerate(sw["levels"]):
             if j in picks:
                 ax.annotate("c=%d" % lv["concurrency"], (xs[j], ys[j]), textcoords="offset points",
@@ -72,7 +77,13 @@ def panel(ax, sweeps, x_key, x_label):
         ax.spines[side].set_color(GRID)
     ax.tick_params(colors=MUTED)
     ax.set_ylim(bottom=0, top=max(max(y) for _, _, y, _ in series_labels) * 1.15)
-    ax.set_xlim(left=0, right=max(max(x) for _, x, _, _ in series_labels) * 1.12)
+    x_min = min(min(x) for _, x, _, _ in series_labels)
+    x_max = max(max(x) for _, x, _, _ in series_labels)
+    ax.set_xlim(left=x_min * 0.85, right=x_max * 1.12)
+    # More than four series: the legend carries identity and direct labels
+    # would collide.
+    if len(series_labels) > 4:
+        return
     # Direct label above each curve's highest-throughput point, aligned
     # inward so it never runs off the plot.
     x_mid = sum(ax.get_xlim()) / 2
@@ -98,14 +109,24 @@ def main() -> int:
     fig, (left, right) = plt.subplots(1, 2, figsize=(13, 5.2), dpi=150)
     panel(left, sweeps, "tpot_p50_ms", "Median time per output token (ms)  → slower streaming")
     panel(right, sweeps, "ttft_p50_ms", "Median time to first token (ms)  → longer wait")
-    left.legend(frameon=False, loc="center right", fontsize=9)
+    left.legend(frameon=False, loc="upper left" if len(sweeps) > 4 else "center right", fontsize=9)
     fig.suptitle(args.title, color=INK, fontsize=13, fontweight="bold", x=0.01, ha="left")
     if all(sw.get("ignore_eos") for sw in sweeps):
         length = "%d output tokens per request" % sweeps[0].get("max_tokens", 256)
     else:
         length = "natural-length answers, up to %d tokens" % max(sw.get("max_tokens", 256) for sw in sweeps)
-    fig.text(0.01, 0.005, "Points are concurrency levels (closed-loop load, %s). "
-             "Up and to the left is better." % length, fontsize=8.5, color=MUTED)
+    levels = sorted({lv["concurrency"] for sw in sweeps for lv in sw["levels"]})
+    rising = all(
+        all(a["output_tokens_per_sec"] < b["output_tokens_per_sec"]
+            for a, b in zip(sw["levels"], sw["levels"][1:]))
+        for sw in sweeps
+    )
+    if rising:
+        where = "Each curve runs from %d concurrent request (bottom) to %d (top)" % (levels[0], levels[-1])
+    else:
+        where = "Points are concurrency levels %d to %d (labeled c=N)" % (levels[0], levels[-1])
+    fig.text(0.01, 0.005, "%s; closed-loop load, %s. Up and to the left is better."
+             % (where, length), fontsize=8.5, color=MUTED)
     fig.tight_layout(rect=(0, 0.03, 1, 0.95))
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     fig.savefig(args.out, facecolor="white")

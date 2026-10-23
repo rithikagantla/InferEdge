@@ -10,7 +10,7 @@ InferEdge is a **benchmarking harness**, and its numbers come from three sources
 
 - **Simulated serving profile (mock mode).** Each model tier has a time-to-first-token and a per-token decode rate modeled on 8B-class and 70B-class GPU serving. That let me compare optimization strategies cheaply and reproducibly, with no GPU bill and no rate limits. The *ratios* between strategies are the point; the absolute milliseconds are the simulator's assumptions, not measurements of real hardware.
 - **Real hosted inference (NIM mode), measured.** The same harness runs unchanged against NVIDIA's hosted NIM endpoints: Nemotron 3 Ultra for the large tier and Nemotron 3.5 Lightning for the small tier. Responses are streamed, so time-to-first-token is measured from the first content chunk rather than estimated. See [Real results: hosted NVIDIA NIM](#real-results-hosted-nvidia-nim) and [What changed vs. the simulator](#what-changed-vs-the-simulator).
-- **Self-hosted GPU (vLLM and TensorRT-LLM on an NVIDIA L4).** The scripts are built and tested, and the GPU runs are next. See [docs/SELF_HOSTED.md](docs/SELF_HOSTED.md).
+- **Self-hosted GPU, measured.** Llama 3 8B Instruct served by vLLM and TensorRT-LLM on one cloud NVIDIA L4, in bf16 and FP8, across 1 to 64 concurrent requests. See [Real results: self-hosted on an NVIDIA L4](#real-results-self-hosted-on-an-nvidia-l4).
 
 Two more things to know when reading the results:
 
@@ -108,6 +108,27 @@ Measured on October 22, 2026 against the free tier of [build.nvidia.com](https:/
 Lightning scales almost linearly: going from 1 to 8 concurrent requests gave 4.9x the throughput while median time to first token stayed between 0.41 and 0.46 seconds. Ultra did not scale at all. Its throughput peaked at 2 concurrent requests, and its tail latency was dominated by queueing spikes of up to 31 seconds before the first token. Ultra's 8 tok/s at concurrency 1 is not its decode speed (its time per token was about 26 ms, roughly 38 tok/s per stream); one 31-second wait inflated that level's wall-clock time.
 
 Raw results: [`benchmark_results/nim/`](benchmark_results/nim/).
+
+## Real results: self-hosted on an NVIDIA L4
+
+Measured on October 23, 2026: `NousResearch/Meta-Llama-3-8B-Instruct` on one NVIDIA L4 (24 GB), served by vLLM 0.21.0 and TensorRT-LLM 1.2.1, and measured by `scripts/sweep_serving.py` running on the same machine, so network latency stays out of the numbers. Each sweep runs 1 to 64 concurrent requests of exactly 256 output tokens. "1 user" means concurrency 1, and "64 users" means concurrency 64.
+
+![Self-hosted throughput vs latency on an L4](docs/img/throughput_vs_latency_l4.png)
+
+| Engine | Precision | 1 user: ms per token | 1 user: TTFT (ms) | 64 users: total tok/s | 64 users: TTFT p50 (ms) | 64 users: ITL p99 (ms) | KV cache (tokens) |
+|---|---|---:|---:|---:|---:|---:|---:|
+| TensorRT-LLM engine | FP8 (weights + KV cache) | 38.3 | 44 | 1,448 | 131 | 48 | 170,176 |
+| vLLM | FP8 (weights) | 35.7 | 51 | 1,332 | 298 | 150 | 81,008 |
+| TensorRT-LLM engine | bf16 | 61.5 | 70 | 889 | 199 | 223 | 39,552 |
+| vLLM | bf16 | 59.1 | 78 | 851 | 367 | 228 | 34,384 |
+| TensorRT-LLM PyTorch backend | bf16 | 59.4 | 78 | 837 | 289 | 236 | 39,424 |
+
+- **Batching is nearly free throughput.** In bf16, going from 1 to 64 concurrent users multiplied vLLM's throughput 50x (17 → 851 tok/s) while one user's time per token only rose from 59 to 74 ms. Decoding is limited by reading the 15 GB of weights from memory, and a batch shares each read.
+- **FP8 is the biggest lever.** It nearly halves the bytes read per token, so one user's text streams about 1.6x faster and peak throughput rises 56–63%. It also frees memory for KV cache, so more conversations fit at once.
+- **TensorRT-LLM wins under load; vLLM wins one user at a time.** With a single user vLLM was 2–3 ms per token faster. At 64 users the TensorRT-LLM FP8 engine gave 9% more throughput, less than half the time to first token (131 vs 298 ms), and much steadier streaming (worst 1% of token gaps 48 vs 150 ms). Its FP8 KV cache held 170,176 tokens, 2.1x vLLM's FP8 mode.
+- **Self-hosted vs. hosted:** the slowest 5% of first-token waits on the shared NIM free tier reached 31 seconds; on a dedicated L4 at 64 concurrent users, p95 time to first token stayed under 0.5 seconds for every engine.
+
+Details, failures and what I learned integrating TensorRT-LLM: [docs/TENSORRT_LLM.md](docs/TENSORRT_LLM.md). Reproduce: [docs/SELF_HOSTED.md](docs/SELF_HOSTED.md). Raw results: [`benchmark_results/gpu/`](benchmark_results/gpu/).
 
 ## What changed vs. the simulator
 
@@ -242,7 +263,7 @@ Interactive docs at `/docs` (OpenAPI/Swagger).
 The `local` engine (`backend/app/inference/local_engine.py`) talks to any self-hosted OpenAI-compatible server, so the rest of the platform needs no changes. `gpu/` contains Modal scripts that start these servers on a cloud NVIDIA L4 and measure them with the same sweep (see [docs/SELF_HOSTED.md](docs/SELF_HOSTED.md)):
 
 - **vLLM** (`gpu/modal_vllm.py`): continuous batching and automatic prefix caching, the real versions of the `batching` and `caching` modes here, served in bf16 and dynamic FP8.
-- **TensorRT-LLM** (`gpu/modal_trtllm.py`): ahead-of-time compiled engines in bf16 and calibrated FP8, the real version of the `quantized` mode, served with `trtllm-serve`. Speculative decoding (draft model or Medusa heads) is the next step.
+- **TensorRT-LLM** (`gpu/modal_trtllm.py`): ahead-of-time compiled engines in bf16 and calibrated FP8 (the real version of the `quantized` mode), plus the 1.x PyTorch backend, all served with `trtllm-serve` and measured above. Speculative decoding (draft model, Medusa or EAGLE) is the next step; see [docs/TENSORRT_LLM.md](docs/TENSORRT_LLM.md).
 - **Triton Inference Server / NVIDIA Dynamo**: production serving with dynamic batching policies, multi-GPU scheduling, and KV-cache-aware routing, the production version of the semantic router's tiering decision.
 
 ## Project structure
