@@ -9,5 +9,6 @@ dist/
 backend/data/*.db
 benchmark_results/*
 !benchmark_results/gpu/
+!benchmark_results/nim/
 .claude/settings.local.json
 .claude/launch.json

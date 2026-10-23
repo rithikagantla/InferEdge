@@ -114,8 +114,10 @@ def summarize_level(concurrency: int, rows: List[dict], errors: int, wall_s: flo
 class _Client:
     """Builds payloads and remembers whether the server takes stream_options."""
 
-    def __init__(self, http: httpx.AsyncClient, model: str, max_tokens: int, ignore_eos: bool):
+    def __init__(self, http: httpx.AsyncClient, model: str, max_tokens: int, ignore_eos: bool,
+                 extra_body: Optional[dict] = None):
         self.http = http
+        self.extra_body = extra_body or {}
         self.model = model
         self.max_tokens = max_tokens
         self.ignore_eos = ignore_eos
@@ -138,6 +140,7 @@ class _Client:
                 payload["ignore_eos"] = True
             if self.include_usage:
                 payload["stream_options"] = {"include_usage": True}
+            payload.update(self.extra_body)
             try:
                 return await stream_chat_completion(self.http, payload)
             except StreamOptionsUnsupported:
@@ -188,6 +191,7 @@ async def run_sweep(
     api_key: str = "",
     log=print,
     transport: Optional[httpx.AsyncBaseTransport] = None,
+    extra_body: Optional[dict] = None,
 ) -> dict:
     headers = {"Authorization": "Bearer " + api_key} if api_key else {}
     limits = httpx.Limits(max_connections=max(levels) + 8, max_keepalive_connections=max(levels) + 8)
@@ -195,7 +199,7 @@ async def run_sweep(
         base_url=base_url, headers=headers, limits=limits,
         timeout=httpx.Timeout(600.0, connect=30.0), transport=transport,
     ) as http:
-        client = _Client(http, model, max_tokens, ignore_eos)
+        client = _Client(http, model, max_tokens, ignore_eos, extra_body)
         log("warm-up: %d requests" % warmup)
         for prompt in SAMPLE_PROMPTS[:warmup]:
             await client.one(prompt)
@@ -216,6 +220,7 @@ async def run_sweep(
         "model": model,
         "max_tokens": max_tokens,
         "ignore_eos": ignore_eos,
+        "extra_body": extra_body or {},
         "stream_usage_reported": client.include_usage,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "levels": results,
@@ -266,12 +271,16 @@ def main() -> int:
     parser.add_argument("--per-worker", type=int, default=3,
                         help="requests per worker at each level")
     parser.add_argument("--api-key", default=os.getenv("SWEEP_API_KEY", ""))
+    parser.add_argument("--extra-body", type=json.loads, default=None,
+                        help='JSON merged into every request, e.g. '
+                             '\'{"chat_template_kwargs": {"enable_thinking": false}}\'')
     parser.add_argument("--out-dir", default="benchmark_results/gpu")
     args = parser.parse_args()
 
     sweep = asyncio.run(run_sweep(
         args.base_url, args.model, args.label, args.levels, args.max_tokens,
         args.ignore_eos, args.min_requests, args.per_worker, api_key=args.api_key,
+        extra_body=args.extra_body,
     ))
     base = write_outputs(sweep, args.out_dir)
     print("\n" + markdown_table(sweep))

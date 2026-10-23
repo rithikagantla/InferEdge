@@ -1,0 +1,85 @@
+{
+  "benchmark": {
+    "id": 5,
+    "created_at": "2026-10-23T04:09:05.111877+00:00",
+    "inference_mode": "nim",
+    "num_prompts": 50,
+    "results": [
+      {
+        "mode": "baseline",
+        "num_requests": 50,
+        "wall_time_s": 283.501,
+        "requests_per_sec": 0.18,
+        "p50_latency_ms": 4146.53,
+        "p95_latency_ms": 15672.26,
+        "avg_ttft_ms": 1427.67,
+        "avg_tokens_per_sec": 25.85,
+        "total_input_tokens": 2550,
+        "total_output_tokens": 4956,
+        "total_cost_usd": 0.007831,
+        "est_cost_per_1m_tokens": 1.0433,
+        "cache_hit_rate": null,
+        "notes": "Sequential single requests to the large model (control)."
+      },
+      {
+        "mode": "batching",
+        "num_requests": 50,
+        "wall_time_s": 99.314,
+        "requests_per_sec": 0.5,
+        "p50_latency_ms": 3312.86,
+        "p95_latency_ms": 18483.11,
+        "avg_ttft_ms": 1051.28,
+        "avg_tokens_per_sec": 28.03,
+        "total_input_tokens": 2550,
+        "total_output_tokens": 4922,
+        "total_cost_usd": 0.007783,
+        "est_cost_per_1m_tokens": 1.0417,
+        "cache_hit_rate": null,
+        "notes": "Batches of 8 sent concurrently to hosted NIM (client-side concurrency; server-side batching is NIM's)."
+      },
+      {
+        "mode": "caching",
+        "num_requests": 50,
+        "wall_time_s": 64.569,
+        "requests_per_sec": 0.77,
+        "p50_latency_ms": 0.05,
+        "p95_latency_ms": 7480.49,
+        "avg_ttft_ms": 203.97,
+        "avg_tokens_per_sec": 32.56,
+        "total_input_tokens": 2481,
+        "total_output_tokens": 3954,
+        "total_cost_usd": 0.001666,
+        "est_cost_per_1m_tokens": 0.2589,
+        "cache_hit_rate": 0.76,
+        "notes": "Zipf-like traffic from a hot pool of 12 FAQs through an LRU response cache."
+      },
+      {
+        "mode": "routing",
+        "num_requests": 50,
+        "wall_time_s": 148.833,
+        "requests_per_sec": 0.34,
+        "p50_latency_ms": 917.02,
+        "p95_latency_ms": 8827.33,
+        "avg_ttft_ms": 931.92,
+        "avg_tokens_per_sec": 49.68,
+        "total_input_tokens": 2550,
+        "total_output_tokens": 3255,
+        "total_cost_usd": 0.002639,
+        "est_cost_per_1m_tokens": 0.4546,
+        "cache_hit_rate": null,
+        "notes": "CUDA/CPU semantic router sends easy intents to a small model tier."
+      }
+    ]
+  },
+  "router_benchmark": {
+    "num_intents": 5000,
+    "embed_dim": 384,
+    "num_categories": 6,
+    "cpu_time_ms": 0.323,
+    "gpu_time_ms": null,
+    "speedup": null,
+    "gpu_available": false,
+    "backend": "cpu (NumPy fallback)",
+    "note": "CPU fallback mode \u2014 install CuPy on an NVIDIA GPU machine to enable CUDA scoring"
+  }
+}

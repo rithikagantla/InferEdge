@@ -31,13 +31,18 @@ _load_dotenv(os.path.join(_REPO_ROOT, ".env"))
 
 INFERENCE_MODE = os.getenv("INFERENCE_MODE", "mock").lower()  # mock | nim | local
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
-NVIDIA_NIM_MODEL = os.getenv("NVIDIA_NIM_MODEL", "nvidia/llama-3.1-nemotron-70b-instruct")
-# Small tier for routed traffic. meta/llama-3.1-8b-instruct was removed from
-# the hosted catalog; Mistral-NeMo-Minitron 8B is NVIDIA's pruned + distilled
-# 8B model, so the small/large split stays roughly 8B vs 70B.
+# Hosted model availability changes: Llama 3.1 Nemotron 70B and Minitron 8B
+# are still listed in the catalog but return 404 for new keys, so both tiers
+# use current Nemotron mixture-of-experts models. Ultra activates ~55B of its
+# 550B parameters per token; Lightning activates ~3B of 30B.
+NVIDIA_NIM_MODEL = os.getenv("NVIDIA_NIM_MODEL", "nvidia/nemotron-3-ultra-550b-a55b")
 NVIDIA_NIM_SMALL_MODEL = os.getenv(
-    "NVIDIA_NIM_SMALL_MODEL", "nvidia/mistral-nemo-minitron-8b-8k-instruct"
+    "NVIDIA_NIM_SMALL_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b"
 )
+# Nemotron 3.x reasons before answering by default. A real-time support
+# agent can't afford that: with a 256-token budget Lightning can spend every
+# token reasoning and return no answer at all.
+NIM_DISABLE_THINKING = os.getenv("NIM_DISABLE_THINKING", "true").lower() == "true"
 NVIDIA_NIM_BASE_URL = os.getenv("NVIDIA_NIM_BASE_URL", "https://integrate.api.nvidia.com/v1")
 # The free build.nvidia.com tier is rate limited, so cap in-flight requests
 # and retry 429/5xx with exponential backoff.

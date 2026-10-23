@@ -5,7 +5,8 @@ self-hosted NIM container) through the shared streaming client.
 
 Environment:
   NVIDIA_API_KEY          — required
-  NVIDIA_NIM_MODEL        — large tier, e.g. nvidia/llama-3.1-nemotron-70b-instruct
+  NVIDIA_NIM_MODEL        — large tier, e.g. nvidia/nemotron-3-ultra-550b-a55b
+  NIM_DISABLE_THINKING    — send enable_thinking=false (default true)
   NVIDIA_NIM_SMALL_MODEL  — small tier for routed traffic
   NVIDIA_NIM_BASE_URL     — defaults to https://integrate.api.nvidia.com/v1
   NIM_MAX_CONCURRENCY     — max in-flight requests (free tier is rate limited)
@@ -39,6 +40,12 @@ class NIMEngine(OpenAICompatEngine):
         if model_tier == "small":
             return config.NVIDIA_NIM_SMALL_MODEL
         return config.NVIDIA_NIM_MODEL
+
+    def _payload(self, prompt: str, model: str) -> dict:
+        payload = super()._payload(prompt, model)
+        if config.NIM_DISABLE_THINKING:
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
+        return payload
 
     @property
     def max_retries(self) -> int:

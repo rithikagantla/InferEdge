@@ -141,3 +141,13 @@ def test_write_outputs(tmp_path):
     for ext in (".json", ".csv", ".md"):
         assert os.path.exists(base + ext)
     assert "| 1 |" in open(base + ".md").read()
+
+
+def test_extra_body_is_sent():
+    transport, state = fake_server(tokens=2, ttft_s=0.0, gap_s=0.0)
+    asyncio.run(sweep.run_sweep(
+        "http://fake/v1", "m", "test", levels=[1], min_requests=1, per_worker=1, warmup=0,
+        log=lambda *_: None, transport=transport,
+        extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+    ))
+    assert state["bodies"][-1]["chat_template_kwargs"] == {"enable_thinking": False}

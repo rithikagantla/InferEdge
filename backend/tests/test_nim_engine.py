@@ -156,3 +156,19 @@ def test_requires_api_key(monkeypatch):
     monkeypatch.setattr(config, "NVIDIA_API_KEY", "")
     with pytest.raises(RuntimeError, match="NVIDIA_API_KEY"):
         NIMEngine()
+
+
+def test_disables_thinking_by_default(monkeypatch):
+    bodies = []
+
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, content=sse(delta("ok")))
+
+    engine = make_engine(handler)
+    asyncio.run(engine.generate("hi"))
+    assert bodies[-1]["chat_template_kwargs"] == {"enable_thinking": False}
+
+    monkeypatch.setattr(config, "NIM_DISABLE_THINKING", False)
+    asyncio.run(engine.generate("hi"))
+    assert "chat_template_kwargs" not in bodies[-1]
