@@ -30,6 +30,7 @@ modal setup                                         # browser login
 modal run gpu/modal_vllm.py --smoke                 # ~5 min sanity check
 modal run gpu/modal_vllm.py --variants bf16,fp8     # vLLM sweeps
 modal run gpu/modal_trtllm.py --variants bf16,fp8   # TensorRT-LLM: builds engines on first run
+modal run gpu/modal_router.py                       # semantic router: CPU vs GPU (CuPy) scoring
 backend/.venv/bin/pip install -r scripts/requirements.txt
 backend/.venv/bin/python scripts/plot_sweep.py benchmark_results/gpu/sweep_*-L4.json
 ```
