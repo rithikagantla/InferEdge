@@ -135,7 +135,7 @@ def main():
     result = bench.remote()
     out = REPO_ROOT / "benchmark_results" / "gpu"
     out.mkdir(parents=True, exist_ok=True)
-    (out / "router_L4.json").write_text(json.dumps(result, indent=2))
-    (out / "router_L4.md").write_text(markdown(result))
+    (out / ("router_%s.json" % GPU)).write_text(json.dumps(result, indent=2))
+    (out / ("router_%s.md" % GPU)).write_text(markdown(result))
     print("\n" + markdown(result))
-    print("saved", out / "router_L4.json", "and router_L4.md")
+    print("saved", out / ("router_%s.json" % GPU), "and .md")

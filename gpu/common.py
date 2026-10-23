@@ -19,7 +19,7 @@ REMOTE_ROOT = "/root/inferedge"
 
 MODEL_ID = "NousResearch/Meta-Llama-3-8B-Instruct"  # ungated copy of Llama 3 8B Instruct
 MODEL_REVISION = "53346005fb0ef11d3b6a83b12c895cca40156b6c"
-GPU = "L4"
+GPU = os.getenv("INFEREDGE_GPU", "L4")  # e.g. INFEREDGE_GPU=T4 modal run ...
 PORT = 8000
 
 # Server log lines worth keeping: how memory was split between weights
