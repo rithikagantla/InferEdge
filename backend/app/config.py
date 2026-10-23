@@ -80,8 +80,8 @@ class ModelTier:
     output_cost_per_1m: float
 
 
-# "small" is what the semantic router sends easy intents to (e.g. an 8B
-# model); "large" handles hard/technical intents (e.g. Nemotron 70B).
+# "small" is what the semantic router sends easy intents to (e.g. Nemotron
+# 3.5 Lightning); "large" handles hard/technical intents (e.g. Nemotron 3 Ultra).
 MODEL_TIERS: Dict[str, ModelTier] = {
     "small": ModelTier(NVIDIA_NIM_SMALL_MODEL, 0.06, 0.24),
     "large": ModelTier(NVIDIA_NIM_MODEL, 0.35, 1.40),
