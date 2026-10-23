@@ -26,7 +26,9 @@ SIZES = [1, 100, 1_000, 10_000, 100_000, 1_000_000]
 REPEATS = 7
 
 image = add_repo_code(
-    modal.Image.from_registry("nvidia/cuda:12.8.1-runtime-ubuntu22.04", add_python="3.12")
+    # devel, not runtime: CuPy compiles its reduction kernels (argmax) at run
+    # time with NVRTC, which needs the CUDA headers (cuda_fp16.h etc.).
+    modal.Image.from_registry("nvidia/cuda:12.8.1-devel-ubuntu22.04", add_python="3.12")
     .entrypoint([])
     .uv_pip_install("numpy<2.3", "cupy-cuda12x==13.6.0", "httpx")
 )
@@ -68,6 +70,15 @@ def bench() -> dict:
         q /= np.linalg.norm(q, axis=1, keepdims=True)
         q_gpu = cp.asarray(q)
         cp.cuda.Stream.null.synchronize()
+
+        # Correctness first: CuPy can swallow kernel-compile errors, so the
+        # GPU must pick the same category as the CPU for every intent
+        # before any timing counts.
+        cpu_winners = (q @ router.centroids_cpu.T).argmax(axis=1)
+        gpu_winners = cp.asnumpy((q_gpu @ router.centroids_gpu.T).argmax(axis=1))
+        if not np.array_equal(cpu_winners, gpu_winners):
+            raise RuntimeError("GPU and CPU disagree on %d of %d intents"
+                               % (int((cpu_winners != gpu_winners).sum()), n))
 
         def cpu():
             (q @ router.centroids_cpu.T).argmax(axis=1)

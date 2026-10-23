@@ -1,0 +1,60 @@
+{
+  "gpu": "NVIDIA L4",
+  "cpu": "x86_64",
+  "cpu_count": 17,
+  "numpy": "2.2.6",
+  "cupy": "13.6.0",
+  "embed_dim": 384,
+  "categories": 6,
+  "repeats": 7,
+  "rows": [
+    {
+      "intents": 1,
+      "cpu_ms": 0.003,
+      "gpu_compute_ms": 0.122,
+      "gpu_end_to_end_ms": 0.258,
+      "speedup_compute": 0.02,
+      "speedup_end_to_end": 0.01
+    },
+    {
+      "intents": 100,
+      "cpu_ms": 0.0108,
+      "gpu_compute_ms": 0.0949,
+      "gpu_end_to_end_ms": 0.271,
+      "speedup_compute": 0.11,
+      "speedup_end_to_end": 0.04
+    },
+    {
+      "intents": 1000,
+      "cpu_ms": 0.2717,
+      "gpu_compute_ms": 0.0949,
+      "gpu_end_to_end_ms": 0.5716,
+      "speedup_compute": 2.86,
+      "speedup_end_to_end": 0.48
+    },
+    {
+      "intents": 10000,
+      "cpu_ms": 2.8432,
+      "gpu_compute_ms": 0.0985,
+      "gpu_end_to_end_ms": 4.1707,
+      "speedup_compute": 28.87,
+      "speedup_end_to_end": 0.68
+    },
+    {
+      "intents": 100000,
+      "cpu_ms": 35.2657,
+      "gpu_compute_ms": 0.896,
+      "gpu_end_to_end_ms": 42.0352,
+      "speedup_compute": 39.36,
+      "speedup_end_to_end": 0.84
+    },
+    {
+      "intents": 1000000,
+      "cpu_ms": 431.5598,
+      "gpu_compute_ms": 8.8348,
+      "gpu_end_to_end_ms": 354.9404,
+      "speedup_compute": 48.85,
+      "speedup_end_to_end": 1.22
+    }
+  ]
+}
