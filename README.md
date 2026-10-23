@@ -15,7 +15,7 @@ InferEdge is a **benchmarking harness**, and its numbers come from three sources
 Two more things to know when reading the results:
 
 - **Costs are estimates.** They use assumed per-token list prices (see `MODEL_TIERS` in `backend/app/config.py`). The free build.nvidia.com tier charges nothing.
-- **Some paths are not exercised on every machine.** `quantized` is simulator-only, and the API refuses it in NIM mode because hosted NIM has no quantization toggle. The router's CUDA path (CuPy) needs an NVIDIA GPU; on a machine without one, the router benchmark reports CPU fallback timings only.
+- **Some paths are not exercised on every machine.** `quantized` is simulator-only, and the API refuses it in NIM mode because hosted NIM has no quantization toggle. The router's CUDA path (CuPy) needs an NVIDIA GPU; on a machine without one, the router benchmark reports CPU fallback timings only. The router's GPU numbers below were measured on a cloud NVIDIA L4.
 
 ## Architecture
 
@@ -199,6 +199,28 @@ Routed small-tier traffic goes to Nemotron 3.5 Lightning; everything else goes t
 # on a GPU machine:
 pip install cupy-cuda12x   # router switches to CUDA automatically
 ```
+
+### Measured on an NVIDIA L4
+
+`gpu/modal_router.py` runs the router's scoring code on an NVIDIA L4 (CuPy) and on the same machine's 17-core CPU (NumPy). Each size is the median of 7 runs, and the GPU must pick the same category as the CPU for every intent before any timing counts.
+
+| Intents | CPU NumPy (ms) | GPU compute only (ms) | GPU incl. transfers (ms) | Speedup, compute only | Speedup, incl. transfers |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 0.003 | 0.122 | 0.258 | 0.02x | 0.01x |
+| 100 | 0.011 | 0.095 | 0.271 | 0.11x | 0.04x |
+| 1,000 | 0.272 | 0.095 | 0.572 | 2.86x | 0.48x |
+| 10,000 | 2.843 | 0.099 | 4.171 | 28.87x | 0.68x |
+| 100,000 | 35.266 | 0.896 | 42.035 | 39.36x | 0.84x |
+| 1,000,000 | 431.560 | 8.835 | 354.940 | 48.85x | 1.22x |
+
+What this shows:
+
+- **The GPU's math is up to 49x faster**, and it wins from about 1,000 intents up.
+- **Moving the data erases most of that win.** Each intent sends 384 numbers to the GPU for only 6 dot products, so copying data over PCIe costs more than the arithmetic saves. Including transfers, the GPU only pulls ahead at around 1 million intents (1.22x).
+- **For one live request, the CPU is about 40x faster** (0.003 ms vs 0.12 ms), because launching GPU work has a fixed cost.
+- **The fix is to keep data on the GPU.** Computing the embeddings on the GPU too (for example with a NeMo Retriever embedding model) would leave only the 6 scores to copy back, and the compute-only column becomes the real speedup. That's the next step for the router.
+
+Raw results: [`benchmark_results/gpu/router_L4.json`](benchmark_results/gpu/router_L4.json).
 
 ## API surface
 
