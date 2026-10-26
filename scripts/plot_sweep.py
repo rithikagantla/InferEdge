@@ -79,14 +79,21 @@ def panel(ax, sweeps, x_key, x_label):
     ax.set_ylim(bottom=0, top=max(max(y) for _, _, y, _ in series_labels) * 1.15)
     x_min = min(min(x) for _, x, _, _ in series_labels)
     x_max = max(max(x) for _, x, _, _ in series_labels)
-    ax.set_xlim(left=x_min * 0.85, right=x_max * 1.12)
+    if x_max / x_min > 20:
+        # One curve's queueing blow-up would squash the rest into a sliver.
+        ax.set_xscale("log")
+        ax.set_xlabel(ax.get_xlabel() + "  (log scale)", color=INK)
+        ax.set_xlim(left=x_min * 0.8, right=x_max * 1.6)
+    else:
+        ax.set_xlim(left=x_min * 0.85, right=x_max * 1.12)
     # More than four series: the legend carries identity and direct labels
     # would collide.
     if len(series_labels) > 4:
         return
     # Direct label above each curve's highest-throughput point, aligned
     # inward so it never runs off the plot.
-    x_mid = sum(ax.get_xlim()) / 2
+    lo, hi = ax.get_xlim()
+    x_mid = (lo * hi) ** 0.5 if ax.get_xscale() == "log" else (lo + hi) / 2
     for label, xs, ys, color in series_labels:
         j = ys.index(max(ys))
         ax.annotate(label, (xs[j], ys[j]), textcoords="offset points", xytext=(0, 9),
@@ -109,7 +116,7 @@ def main() -> int:
     fig, (left, right) = plt.subplots(1, 2, figsize=(13, 5.2), dpi=150)
     panel(left, sweeps, "tpot_p50_ms", "Median time per output token (ms)  → slower streaming")
     panel(right, sweeps, "ttft_p50_ms", "Median time to first token (ms)  → longer wait")
-    left.legend(frameon=False, loc="upper left" if len(sweeps) > 4 else "center right", fontsize=9)
+    left.legend(frameon=False, loc="upper left" if len(sweeps) > 4 else "best", fontsize=9)
     fig.suptitle(args.title, color=INK, fontsize=13, fontweight="bold", x=0.01, ha="left")
     if all(sw.get("ignore_eos") for sw in sweeps):
         length = "%d output tokens per request" % sweeps[0].get("max_tokens", 256)

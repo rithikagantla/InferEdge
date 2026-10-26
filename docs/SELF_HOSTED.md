@@ -28,9 +28,12 @@ modal setup                                         # browser login
 
 ```bash
 modal run gpu/modal_vllm.py --smoke                 # ~5 min sanity check
-modal run gpu/modal_vllm.py --variants bf16,fp8     # vLLM sweeps
+modal run gpu/modal_vllm.py --variants bf16,fp8,fp8-kv   # vLLM sweeps (fp8-kv: FP8 KV cache too)
 modal run gpu/modal_trtllm.py --variants bf16,fp8,pytorch-bf16  # TensorRT-LLM: builds engines on first run
+modal run gpu/modal_trtllm.py --variants pytorch-bf16-natural,spec-draft,spec-ngram-private  # speculative decoding
+modal run gpu/modal_trtllm.py --variants fp8-bs128,fp8-bs256,fp8-bs256-tok16k  # batching limits
 modal run gpu/modal_router.py                       # semantic router: CPU vs GPU (CuPy) scoring
+modal run gpu/modal_router_embed.py                 # router with MiniLM embeddings: accuracy + GPU latency
 backend/.venv/bin/pip install -r scripts/requirements.txt
 backend/.venv/bin/python scripts/plot_sweep.py benchmark_results/gpu/sweep_*-L4.json
 ```

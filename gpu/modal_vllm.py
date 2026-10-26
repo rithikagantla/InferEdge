@@ -2,6 +2,7 @@
 
     modal run gpu/modal_vllm.py --smoke                 # ~5 min check, bf16, c=1,2
     modal run gpu/modal_vllm.py --variants bf16,fp8     # full sweeps
+    modal run gpu/modal_vllm.py --variants fp8-kv       # FP8 weights + FP8 KV cache
     modal serve gpu/modal_vllm.py                       # temporary public endpoint
                                                         # for INFERENCE_MODE=local
 
@@ -52,8 +53,12 @@ def vllm_cmd(precision: str, host: str = "127.0.0.1") -> list:
     ]
     if precision == "fp8":
         cmd += ["--quantization", "fp8"]
+    elif precision == "fp8-kv":
+        # FP8 weights *and* KV cache, the like-for-like comparison with the
+        # TensorRT-LLM FP8 engine (which quantizes its KV cache too).
+        cmd += ["--quantization", "fp8", "--kv-cache-dtype", "fp8"]
     elif precision != "bf16":
-        raise ValueError("precision must be bf16 or fp8")
+        raise ValueError("precision must be bf16, fp8 or fp8-kv")
     return cmd
 
 

@@ -137,7 +137,7 @@ def served_model_id() -> str:
 
 
 def run_sweep_and_package(label: str, levels: List[int], meta: dict, server: Server,
-                          sampler: GpuSampler) -> Dict[str, str]:
+                          sampler: GpuSampler, ignore_eos: Optional[bool] = None) -> Dict[str, str]:
     """Run the InferEdge sweep against the local server; return output files as text."""
     import asyncio
     import tempfile
@@ -147,7 +147,11 @@ def run_sweep_and_package(label: str, levels: List[int], meta: dict, server: Ser
 
     model = served_model_id()
     base_url = "http://127.0.0.1:%d/v1" % PORT
-    ignore_eos = _supports_ignore_eos(sweep_serving, base_url, model)
+    # None: force fixed-length outputs if the server supports it. False:
+    # natural-length answers, for speculative decoding, where drafting
+    # past the end of an answer would distort acceptance.
+    if ignore_eos is None:
+        ignore_eos = _supports_ignore_eos(sweep_serving, base_url, model)
     result = asyncio.run(sweep_serving.run_sweep(
         base_url, model, label, levels=levels, ignore_eos=ignore_eos,
     ))
