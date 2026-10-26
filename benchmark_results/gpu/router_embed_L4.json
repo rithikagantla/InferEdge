@@ -1,0 +1,285 @@
+{
+  "gpu": "NVIDIA L4",
+  "cpu_cores": 8.0,
+  "torch": "2.7.0+cu126",
+  "model": "sentence-transformers/all-MiniLM-L6-v2",
+  "eval_set_size": 60,
+  "accuracy": {
+    "hashed": {
+      "category_accuracy": 0.417,
+      "tier_accuracy": 0.667,
+      "misses": [
+        [
+          "You took money from my account on the 3rd and again on the 4th.",
+          "billing",
+          "technical_support"
+        ],
+        [
+          "Why does my receipt show tax when it didn't last month?",
+          "billing",
+          "account_management"
+        ],
+        [
+          "Can I switch to paying yearly instead of monthly?",
+          "billing",
+          "human_escalation"
+        ],
+        [
+          "My company needs a VAT number added to past invoices.",
+          "billing",
+          "shipping"
+        ],
+        [
+          "The promo code I used didn't reduce what I paid.",
+          "billing",
+          "technical_support"
+        ],
+        [
+          "I got billed for a seat we removed weeks ago.",
+          "billing",
+          "refund"
+        ],
+        [
+          "How do I pay with PayPal instead of a card?",
+          "billing",
+          "human_escalation"
+        ],
+        [
+          "Exports to CSV come out with garbled characters.",
+          "technical_support",
+          "human_escalation"
+        ],
+        [
+          "Notifications aren't showing up on my Android phone.",
+          "technical_support",
+          "account_management"
+        ],
+        [
+          "Search returns nothing even for items I know exist.",
+          "technical_support",
+          "refund"
+        ],
+        [
+          "Images upload but show as broken thumbnails.",
+          "technical_support",
+          "shipping"
+        ],
+        [
+          "Sync conflicts are duplicating all my calendar events.",
+          "technical_support",
+          "account_management"
+        ],
+        [
+          "I can't get into my profile anymore, the login link expired.",
+          "account_management",
+          "billing"
+        ],
+        [
+          "My authenticator app was on my old phone and now I'm locked out.",
+          "account_management",
+          "billing"
+        ],
+        [
+          "How do I remove a former employee's access?",
+          "account_management",
+          "human_escalation"
+        ],
+        [
+          "I'd like to move from the basic tier to the pro tier.",
+          "account_management",
+          "technical_support"
+        ],
+        [
+          "Where do I update my phone number for security codes?",
+          "account_management",
+          "billing"
+        ],
+        [
+          "The jacket didn't fit, can I get my money back?",
+          "refund",
+          "account_management"
+        ],
+        [
+          "I cancelled within the trial but was still charged, please reverse it.",
+          "refund",
+          "billing"
+        ],
+        [
+          "You said I'd be reimbursed for the late delivery, when?",
+          "refund",
+          "shipping"
+        ],
+        [
+          "The concert was cancelled, how do I get reimbursed for tickets?",
+          "refund",
+          "billing"
+        ],
+        [
+          "Can I get compensated for the broken item instead of a replacement?",
+          "refund",
+          "billing"
+        ],
+        [
+          "I was promised a price adjustment after the sale started.",
+          "refund",
+          "technical_support"
+        ],
+        [
+          "The course was nothing like described, I want my payment returned.",
+          "refund",
+          "billing"
+        ],
+        [
+          "Is the restocking fee taken out of my reimbursement?",
+          "refund",
+          "technical_support"
+        ],
+        [
+          "Can you send it to my office instead of my home?",
+          "shipping",
+          "account_management"
+        ],
+        [
+          "How much does express delivery to Canada cost?",
+          "shipping",
+          "refund"
+        ],
+        [
+          "Only two of the three boxes arrived.",
+          "shipping",
+          "technical_support"
+        ],
+        [
+          "Can I pick the order up from a locker?",
+          "shipping",
+          "human_escalation"
+        ],
+        [
+          "The box was soaked and the contents are ruined.",
+          "shipping",
+          "technical_support"
+        ],
+        [
+          "When will the backordered item actually ship?",
+          "shipping",
+          "technical_support"
+        ],
+        [
+          "I'm considering legal action unless someone senior calls me.",
+          "human_escalation",
+          "account_management"
+        ],
+        [
+          "This is unacceptable and I want it reviewed by management.",
+          "human_escalation",
+          "billing"
+        ],
+        [
+          "Escalate my case, the ticket number is 55120.",
+          "human_escalation",
+          "shipping"
+        ],
+        [
+          "Is there an actual human I can email directly?",
+          "human_escalation",
+          "billing"
+        ]
+      ]
+    },
+    "minilm": {
+      "category_accuracy": 0.933,
+      "tier_accuracy": 1.0,
+      "misses": [
+        [
+          "Can I switch to paying yearly instead of monthly?",
+          "billing",
+          "account_management"
+        ],
+        [
+          "Where do I update my phone number for security codes?",
+          "account_management",
+          "shipping"
+        ],
+        [
+          "You said I'd be reimbursed for the late delivery, when?",
+          "refund",
+          "shipping"
+        ],
+        [
+          "I'd like a credit back for the hours your service was down.",
+          "refund",
+          "billing"
+        ]
+      ]
+    }
+  },
+  "latency": [
+    {
+      "messages": 1,
+      "cpu_ms": 10.59,
+      "gpu_resident_ms": 7.137,
+      "gpu_embed_only_ms": 7.079,
+      "speedup_gpu_resident": 1.48,
+      "gpu_messages_per_s": 140,
+      "cpu_messages_per_s": 94
+    },
+    {
+      "messages": 10,
+      "cpu_ms": 17.683,
+      "gpu_resident_ms": 8.913,
+      "gpu_embed_only_ms": 8.602,
+      "speedup_gpu_resident": 1.98,
+      "gpu_messages_per_s": 1122,
+      "cpu_messages_per_s": 566
+    },
+    {
+      "messages": 100,
+      "cpu_ms": 75.641,
+      "gpu_resident_ms": 13.771,
+      "gpu_embed_only_ms": 13.815,
+      "speedup_gpu_resident": 5.49,
+      "gpu_messages_per_s": 7262,
+      "cpu_messages_per_s": 1322
+    },
+    {
+      "messages": 1000,
+      "cpu_ms": 702.967,
+      "gpu_resident_ms": 72.688,
+      "gpu_embed_only_ms": 74.087,
+      "speedup_gpu_resident": 9.67,
+      "gpu_messages_per_s": 13757,
+      "cpu_messages_per_s": 1423
+    },
+    {
+      "messages": 10000,
+      "cpu_ms": 5850.852,
+      "gpu_resident_ms": 647.898,
+      "gpu_embed_only_ms": 654.7,
+      "speedup_gpu_resident": 9.03,
+      "gpu_messages_per_s": 15435,
+      "cpu_messages_per_s": 1709
+    }
+  ],
+  "hashed_cpu_latency": [
+    {
+      "messages": 1,
+      "cpu_ms": 0.423
+    },
+    {
+      "messages": 10,
+      "cpu_ms": 3.644
+    },
+    {
+      "messages": 100,
+      "cpu_ms": 31.497
+    },
+    {
+      "messages": 1000,
+      "cpu_ms": 312.301
+    },
+    {
+      "messages": 10000,
+      "cpu_ms": 3137.384
+    }
+  ]
+}

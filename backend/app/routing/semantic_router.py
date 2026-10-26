@@ -31,7 +31,19 @@ A single query matvec is too small to show off a GPU, which is why
 `benchmark()` scores a large batch of intents at once (N x dim matrix)
 on both backends and reports the speedup — that mirrors scoring a
 concurrent stream of production traffic.
+
+Real embeddings (ROUTER_EMBEDDINGS=minilm)
+------------------------------------------
+Measured on an L4, the GPU's scoring was up to 49x faster but copying
+embeddings from the CPU to the GPU erased most of the gain. With
+ROUTER_EMBEDDINGS=minilm the router embeds with sentence-transformers'
+all-MiniLM-L6-v2 (also 384-dim) instead of hashing words, and on a GPU the
+embeddings are produced, scored and argmax'd on the device: only the
+winning category index comes back. Requires `pip install
+sentence-transformers` (pulls in PyTorch); the default `hashed` path has
+no such dependency.
 """
+import os
 import time
 import zlib
 from typing import Dict, List, Optional
@@ -51,6 +63,8 @@ except Exception:
     GPU_AVAILABLE = False
 
 EMBED_DIM = 384
+MINILM_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+ROUTER_EMBEDDINGS = os.getenv("ROUTER_EMBEDDINGS", "hashed").lower()  # hashed | minilm
 
 CATEGORY_EXEMPLARS: Dict[str, List[str]] = {
     "billing": [
@@ -130,9 +144,41 @@ def embed(text: str) -> np.ndarray:
     return vec / norm if norm > 0 else vec
 
 
+class MiniLMEmbedder:
+    """Sentence-transformer embeddings, kept on the GPU when there is one."""
+
+    def __init__(self, device: Optional[str] = None) -> None:
+        import torch
+        from sentence_transformers import SentenceTransformer
+
+        self.torch = torch
+        self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = SentenceTransformer(MINILM_MODEL, device=self.device)
+
+    def encode(self, texts: List[str]):
+        """(len(texts), 384) unit-norm tensor on self.device."""
+        return self.model.encode(texts, convert_to_tensor=True, normalize_embeddings=True,
+                                 batch_size=256, show_progress_bar=False)
+
+
 class SemanticRouter:
-    def __init__(self) -> None:
+    def __init__(self, embeddings: str = ROUTER_EMBEDDINGS) -> None:
         self.categories = list(CATEGORY_EXEMPLARS.keys())
+        self.embeddings = embeddings
+        self.embedder: Optional[MiniLMEmbedder] = None
+        if embeddings == "minilm":
+            self.embedder = MiniLMEmbedder()
+            torch = self.embedder.torch
+            centroids_t = torch.stack([
+                self.embedder.encode(CATEGORY_EXEMPLARS[c]).mean(dim=0) for c in self.categories
+            ])
+            # Resident on the embedder's device for the life of the router.
+            self.centroids_t = torch.nn.functional.normalize(centroids_t, dim=1)
+            self.centroids_cpu = self.centroids_t.cpu().numpy().astype(np.float32)
+            self.centroids_gpu = None
+            self.backend = "MiniLM embeddings + scoring on %s (PyTorch)" % self.embedder.device
+            self.last_benchmark: Optional[dict] = None
+            return
         centroids = []
         for category in self.categories:
             exemplar_matrix = np.stack([embed(p) for p in CATEGORY_EXEMPLARS[category]])
@@ -144,10 +190,27 @@ class SemanticRouter:
         # ...and resident in GPU memory once, if we have one.
         self.centroids_gpu = cp.asarray(self.centroids_cpu) if GPU_AVAILABLE else None
         self.backend = "cuda (CuPy)" if GPU_AVAILABLE else "cpu (NumPy fallback)"
-        self.last_benchmark: Optional[dict] = None
+        self.last_benchmark = None
+
+    def classify_batch(self, prompts: List[str]) -> List[str]:
+        """Category for each prompt. With MiniLM on a GPU, embedding, scoring
+        and argmax all stay on the device; only the indices come back."""
+        if self.embedder is not None:
+            scores = self.embedder.encode(prompts) @ self.centroids_t.T
+            idx = scores.argmax(dim=1).cpu().tolist()
+        else:
+            queries = np.stack([embed(p) for p in prompts])
+            with np.errstate(all="ignore"):
+                idx = (queries @ self.centroids_cpu.T).argmax(axis=1).tolist()
+        return [self.categories[i] for i in idx]
 
     # -- classification ----------------------------------------------------
     def classify(self, prompt: str) -> dict:
+        if self.embedder is not None:
+            start = time.perf_counter()
+            scores = (self.embedder.encode([prompt])[0] @ self.centroids_t.T).cpu().numpy()
+            route_time_ms = (time.perf_counter() - start) * 1000
+            return self._result(scores, route_time_ms)
         query = embed(prompt)
         start = time.perf_counter()
         if GPU_AVAILABLE:
@@ -158,7 +221,9 @@ class SemanticRouter:
         else:
             scores = self.centroids_cpu @ query
         route_time_ms = (time.perf_counter() - start) * 1000
+        return self._result(scores, route_time_ms)
 
+    def _result(self, scores: np.ndarray, route_time_ms: float) -> dict:
         best = int(np.argmax(scores))
         category = self.categories[best]
         # Softmax over similarities → a friendlier confidence number.
