@@ -11,6 +11,7 @@ InferEdge is a **benchmarking harness**, and its numbers come from three sources
 - **Simulated serving profile (mock mode).** Each model tier has a time-to-first-token and a per-token decode rate modeled on 8B-class and 70B-class GPU serving. That let me compare optimization strategies cheaply and reproducibly, with no GPU bill and no rate limits. The *ratios* between strategies are the point; the absolute milliseconds are the simulator's assumptions, not measurements of real hardware.
 - **Real hosted inference (NIM mode), measured.** The same harness runs unchanged against NVIDIA's hosted NIM endpoints: Nemotron 3 Ultra for the large tier and Nemotron 3.5 Lightning for the small tier. Responses are streamed, so time-to-first-token is measured from the first content chunk rather than estimated. See [Real results: hosted NVIDIA NIM](#real-results-hosted-nvidia-nim) and [What changed vs. the simulator](#what-changed-vs-the-simulator).
 - **Self-hosted GPU, measured.** Llama 3 8B Instruct served by vLLM and TensorRT-LLM on one cloud NVIDIA L4, in bf16 and FP8, across 1 to 64 concurrent requests. See [Real results: self-hosted on an NVIDIA L4](#real-results-self-hosted-on-an-nvidia-l4).
+- **Routing strategies, measured and graded.** InferEdge's router vs. NVIDIA NeMo Switchyard's random and LLM-classifier routing on real NIM models, with every answer graded blind. See [Routing strategies compared](#routing-strategies-compared-nvidia-nemo-switchyard).
 
 Two more things to know when reading the results:
 
@@ -118,6 +119,7 @@ Measured on October 23, 2026: `NousResearch/Meta-Llama-3-8B-Instruct` on one NVI
 | Engine | Precision | 1 user: ms per token | 1 user: TTFT (ms) | 64 users: total tok/s | 64 users: TTFT p50 (ms) | 64 users: ITL p99 (ms) | KV cache (tokens) |
 |---|---|---:|---:|---:|---:|---:|---:|
 | TensorRT-LLM engine | FP8 (weights + KV cache) | 38.3 | 44 | 1,448 | 131 | 48 | 170,176 |
+| vLLM | FP8 (weights + KV cache) | 35.8 | 53 | 1,394 | 283 | 139 | 155,936 |
 | vLLM | FP8 (weights) | 35.7 | 51 | 1,332 | 298 | 150 | 81,008 |
 | TensorRT-LLM engine | bf16 | 61.5 | 70 | 889 | 199 | 223 | 39,552 |
 | vLLM | bf16 | 59.1 | 78 | 851 | 367 | 228 | 34,384 |
@@ -125,8 +127,13 @@ Measured on October 23, 2026: `NousResearch/Meta-Llama-3-8B-Instruct` on one NVI
 
 - **Batching is nearly free throughput.** In bf16, going from 1 to 64 concurrent users multiplied vLLM's throughput 50x (17 → 851 tok/s) while one user's time per token only rose from 59 to 74 ms. Decoding is limited by reading the 15 GB of weights from memory, and a batch shares each read.
 - **FP8 is the biggest lever.** It nearly halves the bytes read per token, so one user's text streams about 1.6x faster and peak throughput rises 56–63%. It also frees memory for KV cache, so more conversations fit at once.
-- **TensorRT-LLM wins under load; vLLM wins one user at a time.** With a single user vLLM was 2–3 ms per token faster. At 64 users the TensorRT-LLM FP8 engine gave 9% more throughput, less than half the time to first token (131 vs 298 ms), and much steadier streaming (worst 1% of token gaps 48 vs 150 ms). Its FP8 KV cache held 170,176 tokens, 2.1x vLLM's FP8 mode.
+- **TensorRT-LLM wins under load; vLLM wins one user at a time.** With a single user vLLM was 2–3 ms per token faster. At 64 users the TensorRT-LLM FP8 engine gave 9% more throughput, less than half the time to first token (131 vs 298 ms), and much steadier streaming (worst 1% of token gaps 48 vs 150 ms). Giving vLLM an FP8 KV cache too nearly doubled its cache (81k → 156k tokens) but barely moved its latency, so TensorRT-LLM's edge comes from its scheduler and kernels, not its cache format.
 - **Self-hosted vs. hosted:** the slowest 5% of first-token waits on the shared NIM free tier reached 31 seconds; on a dedicated L4 at 64 concurrent users, p95 time to first token stayed under 0.5 seconds for every engine.
+
+**Going further on the same GPU** (details in [docs/TENSORRT_LLM.md](docs/TENSORRT_LLM.md)):
+
+- **Speculative decoding:** a Llama 3.2 1B draft model made one user's text stream 1.4x faster (59 → 41 ms per token) with identical output. On a 24 GB card, though, the second model leaves room for only a third of the KV cache, so beyond about 8 concurrent users requests queue (21 s first-token waits at 64). N-gram speculation was slower than none for support answers (0.96x at one user, 0.47x at 64).
+- **Batching limits:** rebuilding the FP8 engine for up to 256 concurrent requests doubled peak throughput to 2,928 tok/s. The knee is around 128 users (2,331 tok/s, first-token p95 under 0.4 s); past it, each user's stream slows to about 12 tokens/s.
 
 Details, failures and what I learned integrating TensorRT-LLM: [docs/TENSORRT_LLM.md](docs/TENSORRT_LLM.md). Reproduce: [docs/SELF_HOSTED.md](docs/SELF_HOSTED.md). Raw results: [`benchmark_results/gpu/`](benchmark_results/gpu/).
 
@@ -138,6 +145,25 @@ Details, failures and what I learned integrating TensorRT-LLM: [docs/TENSORRT_LL
 4. **Caching matched.** Same traffic shape, same 76% hit rate, and a 75% cost reduction (the simulator gave 76%).
 5. **Reasoning models need to be told not to reason.** Nemotron 3.x thinks before answering by default. With a 256-token budget, Lightning spent every token reasoning and returned no answer, and Ultra's first visible token took 1.1 seconds instead of 0.36. NIM requests now send `enable_thinking: false` (`NIM_DISABLE_THINKING`).
 6. **The hosted catalog is not a guarantee.** Llama 3.1 Nemotron 70B and Mistral-NeMo-Minitron 8B are still listed at `/v1/models` but return 404 for new keys. Probing each model before benchmarking caught this.
+
+## Routing strategies compared: NVIDIA NeMo Switchyard
+
+I put [NeMo Switchyard](https://github.com/NVIDIA-NeMo/Switchyard), NVIDIA's open-source LLM routing proxy, in front of the same two NIM models and ran the 50 prompts through its random and LLM-classifier routing, next to InferEdge's own router and both single-model baselines. A model that isn't one of the two candidates (`gpt-oss-20b`) graded every answer blind, 1 to 5.
+
+| Strategy | Weak-model share | Quality (1-5) | Quality, hard requests | Good or better | TTFT p50 (ms) | TTFT p95 (ms) | Cost incl. judge ($) | vs always-Ultra |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| always-ultra | 0% | 3.78 | 3.8 | 66% | 660 | 2707 | 0.00739 | +0% |
+| always-lightning | 100% | 3.66 | 3.8 | 70% | 233 | 308 | 0.00086 | -88% |
+| inferedge-semantic | 74% | 3.68 | 4.2 | 70% | 247 | 1636 | 0.00257 | -65% |
+| sy-classifier | 16% | 3.92 | 4.3 | 74% | 3874 | 7577 | 0.01115 | +51% |
+| sy-random | 48% | 3.88 | 3.7 | 72% | 356 | 2079 | 0.00483 | -35% |
+| sy-random-matched | 18% | 3.72 | 3.7 | 64% | 396 | 10529 | 0.00649 | -12% |
+
+- **Quality was a statistical tie.** On these short support turns, none of the strategies differed from always-Ultra beyond the noise (paired 95% bootstrap intervals all include zero). Even the small model alone matched it.
+- **So cost and latency decide, and there the gaps are large.** InferEdge's router was 65% cheaper than always-Ultra with no routing delay. Switchyard's LLM classifier was 51% *more* expensive and added about 3 seconds before the first token. Each judge verdict read about 1,125 tokens, roughly 8x an average answer, and the judge sent 84% of requests to the big model anyway.
+- **LLM-judge routing pays off when the judge is cheap relative to the work it routes**, like long agentic or coding tasks. For real-time support turns, a millisecond embedding router (or simply the small model) is the better trade.
+
+Setup, method, caveats and how to reproduce: [docs/SWITCHYARD.md](docs/SWITCHYARD.md).
 
 ## Quickstart (mock mode — no GPU, no API key)
 
@@ -212,7 +238,7 @@ Routed small-tier traffic goes to Nemotron 3.5 Lightning; everything else goes t
 
 `backend/app/routing/semantic_router.py` classifies prompts into six support intents (billing, technical_support, account_management, refund, shipping, human_escalation) and maps each to a model tier.
 
-- **Embeddings:** deterministic hashed random-projection vectors (384-dim) — a dependency-free stand-in with the same interface as a real encoder (swap in NeMo Retriever / sentence-transformers in one function).
+- **Embeddings:** by default, deterministic hashed random-projection vectors (384-dim), a dependency-free stand-in that matches words rather than meaning. Set `ROUTER_EMBEDDINGS=minilm` to use the `all-MiniLM-L6-v2` sentence encoder instead (needs `sentence-transformers`); on a GPU, embedding and scoring then both stay on the device.
 - **Scoring:** cosine similarity against category centroids — dense matmuls that run as **cuBLAS kernels via CuPy** on an NVIDIA GPU, with an automatic **NumPy CPU fallback** ("CPU fallback mode") when no GPU is present.
 - **CPU vs GPU benchmark:** `POST /router/benchmark` scores thousands of intents on both backends (with warm-up and explicit `cudaStreamSynchronize` so timings are honest) and reports the speedup. The dashboard has a one-click button for it.
 
@@ -239,9 +265,37 @@ What this shows:
 - **The GPU's math is up to 49x faster**, and it wins from about 1,000 intents up.
 - **Moving the data erases most of that win.** Each intent sends 384 numbers to the GPU for only 6 dot products, so copying data over PCIe costs more than the arithmetic saves. Including transfers, the GPU only pulls ahead at around 1 million intents (1.22x).
 - **For one live request, the CPU is about 40x faster** (0.003 ms vs 0.12 ms), because launching GPU work has a fixed cost.
-- **The fix is to keep data on the GPU.** Computing the embeddings on the GPU too (for example with a NeMo Retriever embedding model) would leave only the 6 scores to copy back, and the compute-only column becomes the real speedup. That's the next step for the router.
+- **The fix is to keep data on the GPU,** which the next measurement does.
 
 Raw results: [`benchmark_results/gpu/router_L4.json`](benchmark_results/gpu/router_L4.json).
+
+### Real embeddings on the GPU (MiniLM)
+
+`gpu/modal_router_embed.py` swaps the hashed embeddings for `all-MiniLM-L6-v2` and measures two things: accuracy on 60 held-out labeled support messages (`backend/app/router_eval_set.py`, none of them seen by the router, many phrased without the obvious keyword), and end-to-end routing time from text in to category out. Every path must return identical categories before any timing counts.
+
+Held-out accuracy (60 labeled support messages):
+
+| Embeddings | Category accuracy | Model-tier accuracy |
+|---|---:|---:|
+| Hashed words (default) | 42% | 67% |
+| all-MiniLM-L6-v2 | 93% | 100% |
+
+End-to-end routing latency, text in to category out, on NVIDIA L4 vs 8 CPU cores (median of several runs):
+
+| Messages | CPU (ms) | GPU, all on device (ms) | GPU embed, CPU score (ms) | Speedup | GPU messages/s |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 10.6 | 7.1 | 7.1 | 1.5x | 140 |
+| 10 | 17.7 | 8.9 | 8.6 | 2.0x | 1,122 |
+| 100 | 75.6 | 13.8 | 13.8 | 5.5x | 7,262 |
+| 1,000 | 703.0 | 72.7 | 74.1 | 9.7x | 13,757 |
+| 10,000 | 5850.9 | 647.9 | 654.7 | 9.0x | 15,435 |
+
+- **The default router was badly wrong on paraphrases:** 42% category accuracy. "The courier says delivered but nothing is at my door" doesn't share words with its shipping examples. MiniLM got 93% of categories right, and every one of its misses still picked the right model tier (100% tier accuracy).
+- **With a real model to run, the GPU wins at every size, even one message** (7.1 vs 10.6 ms), and is 9–10x faster from 1,000 messages up, at about 15,000 messages per second. The earlier CuPy benchmark lost at small sizes because six dot products are too little work to be worth a trip to the GPU; a transformer forward pass is not.
+- **Copying results back no longer matters:** embedding on the GPU and scoring on the CPU costs about the same as keeping everything on the device, because the transformer, not the transfer, now dominates.
+- **The cost is about 10 ms per message on CPU instead of 0.4 ms** for hashed embeddings, which is still negligible next to an LLM call.
+
+Raw results: [`benchmark_results/gpu/router_embed_L4.json`](benchmark_results/gpu/router_embed_L4.json).
 
 ## API surface
 
@@ -263,7 +317,8 @@ Interactive docs at `/docs` (OpenAPI/Swagger).
 The `local` engine (`backend/app/inference/local_engine.py`) talks to any self-hosted OpenAI-compatible server, so the rest of the platform needs no changes. `gpu/` contains Modal scripts that start these servers on a cloud NVIDIA L4 and measure them with the same sweep (see [docs/SELF_HOSTED.md](docs/SELF_HOSTED.md)):
 
 - **vLLM** (`gpu/modal_vllm.py`): continuous batching and automatic prefix caching, the real versions of the `batching` and `caching` modes here, served in bf16 and dynamic FP8.
-- **TensorRT-LLM** (`gpu/modal_trtllm.py`): ahead-of-time compiled engines in bf16 and calibrated FP8 (the real version of the `quantized` mode), plus the 1.x PyTorch backend, all served with `trtllm-serve` and measured above. Speculative decoding (draft model, Medusa or EAGLE) is the next step; see [docs/TENSORRT_LLM.md](docs/TENSORRT_LLM.md).
+- **TensorRT-LLM** (`gpu/modal_trtllm.py`): ahead-of-time compiled engines in bf16 and calibrated FP8 (the real version of the `quantized` mode), plus the 1.x PyTorch backend with draft-model and n-gram speculative decoding, all served with `trtllm-serve` and measured above; see [docs/TENSORRT_LLM.md](docs/TENSORRT_LLM.md).
+- **NVIDIA NeMo Switchyard** (`switchyard/nim_routes.toml`): an OpenAI-compatible routing proxy in front of the NIM models, measured above. Because InferEdge's `local` engine speaks the same API, the app can point at Switchyard too.
 - **Triton Inference Server / NVIDIA Dynamo**: production serving with dynamic batching policies, multi-GPU scheduling, and KV-cache-aware routing, the production version of the semantic router's tiering decision.
 
 ## Project structure
@@ -278,6 +333,7 @@ backend/
     db.py                 SQLite persistence for benchmark runs
     config.py             env config + model-tier pricing
     sample_prompts.py     customer-support prompt suite
+    router_eval_set.py    60 held-out labeled messages for router accuracy
     inference/
       engine.py           engine abstraction + factory
       mock_engine.py      simulated serving profiles (default)
@@ -289,12 +345,14 @@ backend/
       semantic_router.py  CUDA (CuPy) / CPU (NumPy) intent router
   tests/                  API, router, NIM client, local engine and sweep tests
 frontend/                 React + TypeScript + Vite dashboard
-gpu/                      Modal scripts: vLLM and TensorRT-LLM on an NVIDIA L4
+gpu/                      Modal scripts: vLLM, TensorRT-LLM and router benchmarks on an NVIDIA L4
+switchyard/               NeMo Switchyard routing config for the NIM models
 scripts/
   run_benchmark.py        optimization-mode benchmark CLI (JSON/CSV/Markdown)
   sweep_serving.py        throughput vs latency across concurrency levels
   plot_sweep.py           throughput-vs-latency charts
-benchmark_results/nim/    measured hosted NIM results
-docs/                     self-hosting guide, charts
+  route_compare.py        routing strategies vs. Switchyard, with blind grading
+benchmark_results/        measured results: nim/, gpu/, switchyard/
+docs/                     TensorRT-LLM log, Switchyard study, self-hosting guide, charts
 docker-compose.yml        backend + dashboard
 ```

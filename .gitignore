@@ -12,3 +12,4 @@ benchmark_results/*
 !benchmark_results/nim/
 .claude/settings.local.json
 .claude/launch.json
+!benchmark_results/switchyard/

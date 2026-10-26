@@ -1,0 +1,157 @@
+[
+  {
+    "strategy": "always-ultra",
+    "requests": 50,
+    "errors": 0,
+    "weak_share": 0.0,
+    "policy_agreement": 0.2,
+    "quality_mean": 3.78,
+    "quality_hard": 3.8,
+    "quality_easy": 3.77,
+    "good_or_better": 0.66,
+    "ttft_p50_ms": 660.0,
+    "ttft_p95_ms": 2707.0,
+    "e2e_p50_ms": 1642.0,
+    "answer_cost_usd": 0.007393,
+    "judge_cost_usd": 0.0,
+    "total_cost_usd": 0.007393,
+    "judge_calls": null,
+    "judge_tokens": 0,
+    "judge_p50_ms": null
+  },
+  {
+    "strategy": "always-lightning",
+    "requests": 50,
+    "errors": 0,
+    "weak_share": 1.0,
+    "policy_agreement": 0.8,
+    "quality_mean": 3.66,
+    "quality_hard": 3.8,
+    "quality_easy": 3.62,
+    "good_or_better": 0.7,
+    "ttft_p50_ms": 233.0,
+    "ttft_p95_ms": 308.0,
+    "e2e_p50_ms": 680.0,
+    "answer_cost_usd": 0.000862,
+    "judge_cost_usd": 0.0,
+    "total_cost_usd": 0.000862,
+    "judge_calls": null,
+    "judge_tokens": 0,
+    "judge_p50_ms": null,
+    "quality_vs_ultra": {
+      "mean": -0.12,
+      "ci95": [
+        -0.54,
+        0.3
+      ]
+    }
+  },
+  {
+    "strategy": "inferedge-semantic",
+    "requests": 50,
+    "errors": 0,
+    "weak_share": 0.74,
+    "policy_agreement": 0.9,
+    "quality_mean": 3.68,
+    "quality_hard": 4.2,
+    "quality_easy": 3.55,
+    "good_or_better": 0.7,
+    "ttft_p50_ms": 247.0,
+    "ttft_p95_ms": 1636.0,
+    "e2e_p50_ms": 962.0,
+    "answer_cost_usd": 0.00257,
+    "judge_cost_usd": 0.0,
+    "total_cost_usd": 0.00257,
+    "judge_calls": null,
+    "judge_tokens": 0,
+    "judge_p50_ms": null,
+    "quality_vs_ultra": {
+      "mean": -0.1,
+      "ci95": [
+        -0.44,
+        0.22
+      ]
+    }
+  },
+  {
+    "strategy": "sy-classifier",
+    "requests": 50,
+    "errors": 0,
+    "weak_share": 0.16,
+    "policy_agreement": 0.36,
+    "quality_mean": 3.92,
+    "quality_hard": 4.3,
+    "quality_easy": 3.83,
+    "good_or_better": 0.74,
+    "ttft_p50_ms": 3874.0,
+    "ttft_p95_ms": 7577.0,
+    "e2e_p50_ms": 5276.0,
+    "answer_cost_usd": 0.006513,
+    "judge_cost_usd": 0.004642,
+    "total_cost_usd": 0.011154,
+    "judge_calls": 50,
+    "judge_tokens": 56230,
+    "judge_p50_ms": 3059.23,
+    "quality_vs_ultra": {
+      "mean": 0.14,
+      "ci95": [
+        -0.12,
+        0.4
+      ]
+    }
+  },
+  {
+    "strategy": "sy-random",
+    "requests": 50,
+    "errors": 0,
+    "weak_share": 0.48,
+    "policy_agreement": 0.56,
+    "quality_mean": 3.88,
+    "quality_hard": 3.7,
+    "quality_easy": 3.92,
+    "good_or_better": 0.72,
+    "ttft_p50_ms": 356.0,
+    "ttft_p95_ms": 2079.0,
+    "e2e_p50_ms": 1021.0,
+    "answer_cost_usd": 0.004835,
+    "judge_cost_usd": 0.0,
+    "total_cost_usd": 0.004835,
+    "judge_calls": 0,
+    "judge_tokens": 0,
+    "judge_p50_ms": null,
+    "quality_vs_ultra": {
+      "mean": 0.1,
+      "ci95": [
+        -0.26,
+        0.46
+      ]
+    }
+  },
+  {
+    "strategy": "sy-random-matched",
+    "requests": 50,
+    "errors": 0,
+    "weak_share": 0.18,
+    "policy_agreement": 0.34,
+    "quality_mean": 3.72,
+    "quality_hard": 3.7,
+    "quality_easy": 3.73,
+    "good_or_better": 0.64,
+    "ttft_p50_ms": 396.0,
+    "ttft_p95_ms": 10529.0,
+    "e2e_p50_ms": 1408.0,
+    "answer_cost_usd": 0.006489,
+    "judge_cost_usd": 0.0,
+    "total_cost_usd": 0.006489,
+    "judge_calls": 0,
+    "judge_tokens": 0,
+    "judge_p50_ms": null,
+    "quality_vs_ultra": {
+      "mean": -0.06,
+      "ci95": [
+        -0.34,
+        0.2
+      ]
+    }
+  }
+]

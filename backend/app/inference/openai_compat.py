@@ -58,6 +58,8 @@ class StreamResult:
     chunk_times_ms: List[float] = field(default_factory=list)
     prompt_tokens: Optional[int] = None
     completion_tokens: Optional[int] = None
+    # Lower-cased response headers, e.g. a router's choice of model.
+    headers: dict = field(default_factory=dict)
 
 
 async def stream_chat_completion(
@@ -73,8 +75,10 @@ async def stream_chat_completion(
     parts: List[str] = []
     chunk_times: List[float] = []
     usage: dict = {}
+    headers: dict = {}
     try:
         async with client.stream("POST", "/chat/completions", json=payload) as resp:
+            headers = {k.lower(): v for k, v in resp.headers.items()}
             if resp.status_code != 200:
                 body = (await resp.aread()).decode(errors="replace")[:500]
                 _raise_for_status(resp, body, payload, auth_hint)
@@ -106,6 +110,7 @@ async def stream_chat_completion(
         chunk_times_ms=chunk_times,
         prompt_tokens=usage.get("prompt_tokens"),
         completion_tokens=usage.get("completion_tokens"),
+        headers=headers,
     )
 
 

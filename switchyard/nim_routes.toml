@@ -1,0 +1,64 @@
+# NVIDIA NeMo Switchyard in front of InferEdge's hosted NIM models.
+#
+#   NVIDIA_API_KEY=... switchyard-server --config switchyard/nim_routes.toml \
+#       --host 127.0.0.1 --port 4000 --routing-log-file routing.jsonl
+#
+# Callers pick a routing strategy by model name: "sy-classifier" or "sy-random".
+# Both choose between the same strong/weak pair InferEdge's own semantic router
+# uses. scripts/route_compare.py runs the 50-prompt comparison.
+schema_version = 1
+
+[llm_clients.nim]
+format = "openai_chat"
+base_url = "https://integrate.api.nvidia.com/v1"
+api_key_env = "NVIDIA_API_KEY"
+timeout_ms = 180000
+
+# Nemotron 3.x reasons before answering unless told not to; a real-time support
+# agent (and a routing judge) can't afford that latency.
+[targets.ultra]
+id = "nvidia/nemotron-3-ultra-550b-a55b"
+llm_client = "nim"
+extra_body = { chat_template_kwargs = { enable_thinking = false } }
+
+[targets.lightning]
+id = "nvidia/nemotron-3.5-lightning-30b-a3b"
+llm_client = "nim"
+extra_body = { chat_template_kwargs = { enable_thinking = false } }
+
+# The judge must be a different model from both candidates (Switchyard keys
+# execution by model id within a route). gpt-oss-20b (~3.6B active parameters)
+# at low reasoning effort answers a verdict in ~1-2 s on hosted NIM, and it
+# isn't one of the two models being routed between.
+[targets.judge]
+id = "openai/gpt-oss-20b"
+llm_client = "nim"
+reasoning_effort = "low"
+
+[routes.classifier]
+id = "sy-classifier"
+type = "llm_classifier"
+mode = "capability"
+classifier_target = "judge"
+strong_target = "ultra"
+weak_target = "lightning"
+base_threshold = 0.5
+threshold_step = 0.1
+max_output_tokens = 512
+
+[routes.random]
+id = "sy-random"
+type = "random"
+targets = ["ultra", "lightning"]
+weights = [1, 1]
+seed = 42
+
+# Same budget as the classifier, no judgement: weights copied from the
+# classifier's observed split on the 50-prompt run (42 strong, 8 weak). If the
+# classifier beats this route on quality, its judging is worth the judge cost.
+[routes.random_matched]
+id = "sy-random-matched"
+type = "random"
+targets = ["ultra", "lightning"]
+weights = [42, 8]
+seed = 42
