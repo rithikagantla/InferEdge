@@ -22,7 +22,9 @@ export function SessionPanel({ turns, config, mode, onMode }: {
         + t.metrics!.output_tokens * large.output_cost_per_1m) / 1e6, 0)
     : 0;
   const ttfts = answered.map((t) => t.metrics!.ttft_ms).sort((a, b) => a - b);
-  const medianTtft = ttfts.length ? ttfts[Math.floor((ttfts.length - 1) / 2)] : null;
+  const mid = ttfts.length >> 1;
+  const medianTtft = !ttfts.length ? null
+    : ttfts.length % 2 ? ttfts[mid] : (ttfts[mid - 1] + ttfts[mid]) / 2;
   const counts = {
     small: answered.filter((t) => t.metrics!.tier === "small" && !t.metrics!.cached).length,
     large: answered.filter((t) => t.metrics!.tier !== "small" && !t.metrics!.cached).length,
