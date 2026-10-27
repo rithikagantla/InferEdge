@@ -1,8 +1,8 @@
 # InferEdge dashboard — build with Vite, serve with nginx.
 FROM node:20-alpine AS build
 WORKDIR /build
-COPY package.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 COPY tsconfig.json vite.config.ts index.html ./
 COPY src ./src
 RUN npm run build

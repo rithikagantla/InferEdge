@@ -176,7 +176,16 @@ python3 -m venv .venv
 .venv/bin/uvicorn app.main:app --port 8000        # http://localhost:8000/docs
 ```
 
-### Frontend (requires Node 18+)
+### Dashboard (requires Node 18+)
+
+The React + TypeScript dashboard has four views:
+
+- **Assistant:** a multi-turn support chatbot. Each answer shows which model handled it, its time to first token, latency and cost, and **Show calculation** walks through how those numbers were derived: the router's similarity scores and decision, token counts, the cost formula with the tier's prices, tokens per second, and the saving versus always using the large model. Conversations persist in the browser.
+- **Router:** classifies a message as you type, with similarity bars, the chosen tier, and a low-confidence warning when the embeddings can't tell intents apart.
+- **Benchmarks:** runs the optimization benchmark against the current backend and compares strategies in an interactive chart and table.
+- **Results:** interactive charts of every measured result: self-hosted L4 sweeps (engines, speculative decoding, batching limits), hosted NIM, the Switchyard routing study, and router accuracy and GPU latency. Hover any point for its numbers; toggle series; switch the x-axis between time per token and time to first token.
+
+Light and dark themes, keyboard navigation, and layouts down to phone width. The chart-heavy views load on demand, so the assistant opens fast.
 
 ```bash
 cd frontend

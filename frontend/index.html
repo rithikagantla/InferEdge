@@ -3,7 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>InferEdge — GPU-Optimized LLM Inference Platform</title>
+    <meta name="description" content="InferEdge: GPU-optimized LLM inference platform for real-time AI agents" />
+    <meta name="theme-color" content="#0b0d0a" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f5f6f3" media="(prefers-color-scheme: light)" />
+    <title>InferEdge</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2376b900'/%3E%3Ctext x='16' y='21.5' font-family='Arial' font-weight='700' font-size='13' text-anchor='middle' fill='%230d1700'%3EIE%3C/text%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+    <script>
+      // Apply the saved theme before first paint to avoid a flash.
+      try {
+        var t = JSON.parse(localStorage.getItem("inferedge.theme"));
+        if (!t) t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
