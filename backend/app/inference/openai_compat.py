@@ -182,13 +182,13 @@ class OpenAICompatEngine(InferenceEngine):
             self._semaphore_loop = loop
         return self._semaphore
 
-    def _payload(self, prompt: str, model: str) -> dict:
+    def _payload(self, prompt: str, model: str, history: Optional[List[dict]] = None) -> dict:
+        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        messages += [{"role": t["role"], "content": t["content"]} for t in (history or [])]
+        messages.append({"role": "user", "content": prompt})
         payload = {
             "model": model,
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
+            "messages": messages,
             "max_tokens": 256,
             "temperature": 0.3,
         }
@@ -196,14 +196,15 @@ class OpenAICompatEngine(InferenceEngine):
             payload["stream_options"] = {"include_usage": True}
         return payload
 
-    async def generate(self, prompt: str, model_tier: str = "large") -> InferenceResult:
+    async def generate(self, prompt: str, model_tier: str = "large",
+                       history: Optional[List[dict]] = None) -> InferenceResult:
         model = self.model_for_tier(model_tier)
         async with self._limiter():
             attempt = 0
             while True:
                 try:
                     result = await stream_chat_completion(
-                        self._client, self._payload(prompt, model), self.auth_hint
+                        self._client, self._payload(prompt, model, history), self.auth_hint
                     )
                     if not result.text:
                         raise RetryableError("empty completion")
@@ -231,7 +232,8 @@ class OpenAICompatEngine(InferenceEngine):
             text=result.text,
             model=model,
             model_tier=model_tier,
-            input_tokens=result.prompt_tokens or config.estimate_tokens(SYSTEM_PROMPT + prompt),
+            input_tokens=result.prompt_tokens or config.estimate_tokens(
+                SYSTEM_PROMPT + prompt + "".join(t["content"] for t in (history or []))),
             output_tokens=result.completion_tokens or config.estimate_tokens(result.text),
             ttft_ms=result.ttft_ms if result.ttft_ms is not None else result.latency_ms,
             latency_ms=result.latency_ms,

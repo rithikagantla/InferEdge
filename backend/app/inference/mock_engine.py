@@ -19,7 +19,7 @@ a demo-friendly amount of time while keeping realistic ratios.
 import asyncio
 import math
 import random
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from .. import config
 from .engine import InferenceEngine, InferenceResult
@@ -101,8 +101,9 @@ def _pick_category(prompt: str) -> str:
 class MockEngine(InferenceEngine):
     name = "mock"
 
-    async def generate(self, prompt: str, model_tier: str = "large") -> InferenceResult:
-        return (await self._generate_shared(prompt, model_tier, batch_size=1))
+    async def generate(self, prompt: str, model_tier: str = "large",
+                       history: Optional[List[dict]] = None) -> InferenceResult:
+        return await self._generate_shared(prompt, model_tier, batch_size=1, history=history)
 
     async def generate_batch(
         self, prompts: List[str], model_tier: str = "large"
@@ -119,13 +120,22 @@ class MockEngine(InferenceEngine):
         )
 
     async def _generate_shared(
-        self, prompt: str, model_tier: str, batch_size: int
+        self, prompt: str, model_tier: str, batch_size: int,
+        history: Optional[List[dict]] = None,
     ) -> InferenceResult:
         ttft_s, per_token_s = _TIER_PROFILE.get(model_tier, _TIER_PROFILE["large"])
         category = _pick_category(prompt)
+        history = history or []
+        if category == "general":
+            # Follow-ups ("what about the other one?") stay on the topic of
+            # the conversation's last recognizable user message.
+            for turn in reversed(history):
+                if turn.get("role") == "user" and _pick_category(turn["content"]) != "general":
+                    category = _pick_category(turn["content"])
+                    break
         text = _RESPONSES[category]
 
-        input_tokens = config.estimate_tokens(prompt)
+        input_tokens = config.estimate_tokens(prompt + "".join(t["content"] for t in history))
         output_tokens = config.estimate_tokens(text)
 
         # Mild per-token slowdown as the batch grows (kernel contention),

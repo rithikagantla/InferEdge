@@ -1,5 +1,8 @@
 """InferEdge API — GPU-optimized LLM inference platform for real-time AI agents."""
+import glob
+import json
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -80,7 +83,8 @@ async def chat(req: ChatRequest) -> ChatResponse:
             422, "mode %r is simulated and only available with INFERENCE_MODE=mock" % req.mode
         )
     try:
-        return await service.chat(req.prompt, mode=req.mode)
+        return await service.chat(req.prompt, mode=req.mode,
+                                  history=[m.model_dump() for m in req.history])
     except NotImplementedError as exc:
         raise HTTPException(501, str(exc))
     except Exception as exc:  # provider/network errors surface as 502
@@ -140,3 +144,83 @@ async def benchmark_results(limit: int = 20) -> dict:
 @app.get("/sample-prompts")
 async def sample_prompts() -> dict:
     return {"prompts": SAMPLE_PROMPTS}
+
+
+MODE_DESCRIPTIONS = {
+    "routing": "Semantic router picks the small or large model per message",
+    "baseline": "Every message goes to the large model",
+    "caching": "Repeated single-turn questions are answered from an LRU cache",
+    "quantized": "Simulated INT8/FP8 large model (mock mode only)",
+}
+
+
+@app.get("/config")
+async def get_config() -> dict:
+    """Models, prices and modes, so the dashboard can explain each number."""
+    router = get_router()
+    from .routing.semantic_router import SMALL_MODEL_CATEGORIES
+
+    modes = [m for m in ("routing", "baseline", "caching", "quantized")
+             if m not in benchmark_runner.MOCK_ONLY_MODES or config.INFERENCE_MODE == "mock"]
+    return {
+        "inference_mode": config.INFERENCE_MODE,
+        "router_backend": router.backend,
+        "router_embeddings": router.embeddings,
+        "small_tier_categories": sorted(SMALL_MODEL_CATEGORIES),
+        "tiers": {
+            name: {"model": t.name, "input_cost_per_1m": t.input_cost_per_1m,
+                   "output_cost_per_1m": t.output_cost_per_1m}
+            for name, t in config.MODEL_TIERS.items()
+        },
+        "chat_modes": [{"id": m, "description": MODE_DESCRIPTIONS[m]} for m in modes],
+    }
+
+
+RESULTS_DIR = os.path.join(config._REPO_ROOT, "benchmark_results")
+
+
+def _read_json(path: str):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+@app.get("/results")
+async def measured_results() -> dict:
+    """Measured (not simulated) results committed under benchmark_results/:
+    hosted NIM runs, self-hosted GPU sweeps, router GPU benchmarks and the
+    Switchyard routing study. Missing files are simply omitted."""
+    sweep_keys = ("concurrency", "requests", "errors", "output_tokens_per_sec",
+                  "requests_per_sec", "ttft_p50_ms", "ttft_p95_ms", "tpot_p50_ms",
+                  "tpot_p95_ms", "itl_p99_ms", "e2e_p50_ms", "avg_output_tokens")
+    meta_keys = ("label", "engine", "engine_version", "precision", "variant", "trtllm_backend",
+                 "gpu_name", "gpu_memory_peak_used_mib", "ignore_eos", "model", "max_tokens",
+                 "speculative_config", "max_batch_size", "max_num_tokens", "created_at")
+
+    def sweeps(pattern: str) -> list:
+        out = []
+        for path in sorted(glob.glob(os.path.join(RESULTS_DIR, pattern))):
+            d = _read_json(path)
+            if not d or not d.get("levels"):
+                continue
+            out.append({**{k: d.get(k) for k in meta_keys},
+                        "levels": [{k: lv.get(k) for k in sweep_keys} for lv in d["levels"]]})
+        return out
+
+    nim_runs = sorted(glob.glob(os.path.join(RESULTS_DIR, "nim", "benchmark_nim_*.json")))
+    nim_benchmark = (_read_json(nim_runs[-1]) or {}).get("benchmark") if nim_runs else None
+    router_embed = _read_json(os.path.join(RESULTS_DIR, "gpu", "router_embed_L4.json"))
+    if router_embed:
+        router_embed = {k: v for k, v in router_embed.items() if k != "accuracy"} | {
+            "accuracy": {name: {k: v for k, v in a.items() if k != "misses"}
+                         for name, a in router_embed["accuracy"].items()}}
+    return {
+        "nim_benchmark": nim_benchmark,
+        "nim_sweeps": sweeps("nim/sweep_*.json"),
+        "gpu_sweeps": sweeps("gpu/sweep_*-L4.json"),
+        "router_gpu": _read_json(os.path.join(RESULTS_DIR, "gpu", "router_L4.json")),
+        "router_embed": router_embed,
+        "routing_study": _read_json(os.path.join(RESULTS_DIR, "switchyard", "route_compare.json")),
+    }

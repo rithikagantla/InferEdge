@@ -6,9 +6,16 @@ from pydantic import BaseModel, Field
 OPTIMIZATION_MODES = ["baseline", "batching", "caching", "routing", "quantized"]
 
 
+class ChatMessage(BaseModel):
+    role: str = Field(..., pattern="^(user|assistant)$")
+    content: str = Field(..., min_length=1, max_length=8000)
+
+
 class ChatRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=4000)
     mode: str = Field("baseline", description="baseline | caching | routing | quantized")
+    # Earlier turns of the conversation, oldest first, for multi-turn chat.
+    history: List[ChatMessage] = Field(default_factory=list, max_length=20)
 
 
 class RequestMetrics(BaseModel):
@@ -24,6 +31,13 @@ class RequestMetrics(BaseModel):
     category: Optional[str] = None
     router_backend: Optional[str] = None
     router_time_ms: Optional[float] = None
+    # What the dashboard needs to show how this request's numbers were derived.
+    tier: Optional[str] = None
+    input_price_per_1m: Optional[float] = None
+    output_price_per_1m: Optional[float] = None
+    route_confidence: Optional[float] = None
+    route_scores: Optional[Dict[str, float]] = None
+    history_turns: int = 0
 
 
 class ChatResponse(BaseModel):

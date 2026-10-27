@@ -13,7 +13,7 @@ batching  — exposed via batch_chat(); requests share the GPU decode
             loop (continuous batching) so throughput scales.
 """
 import time
-from typing import List
+from typing import List, Optional
 
 from . import config
 from .inference import get_engine
@@ -30,10 +30,11 @@ def _build_metrics(
     result: InferenceResult,
     mode: str,
     cached: bool = False,
-    category: str = None,
-    router_backend: str = None,
-    router_time_ms: float = None,
+    route: Optional[dict] = None,
+    history_turns: int = 0,
 ) -> RequestMetrics:
+    route = route or {}
+    tier = config.MODEL_TIERS.get(result.model_tier)
     cost = 0.0 if cached else config.estimate_cost_usd(
         result.model_tier, result.input_tokens, result.output_tokens
     )
@@ -51,16 +52,28 @@ def _build_metrics(
         tokens_per_sec=round(tokens_per_sec, 2),
         cost_usd=round(cost, 8),
         cached=cached,
-        category=category,
-        router_backend=router_backend,
-        router_time_ms=router_time_ms,
+        category=route.get("category"),
+        router_backend=route.get("backend"),
+        router_time_ms=route.get("route_time_ms"),
+        tier=result.model_tier,
+        input_price_per_1m=tier.input_cost_per_1m if tier else None,
+        output_price_per_1m=tier.output_cost_per_1m if tier else None,
+        route_confidence=route.get("confidence"),
+        route_scores=route.get("scores"),
+        history_turns=history_turns,
     )
 
 
-async def chat(prompt: str, mode: str = "baseline", record: bool = True) -> ChatResponse:
+async def chat(prompt: str, mode: str = "baseline", record: bool = True,
+               history: Optional[List[dict]] = None) -> ChatResponse:
     engine = get_engine()
+    history = history or []
+    turns = len(history)
 
-    if mode == "caching":
+    # The response cache is keyed on the prompt alone, so it only serves
+    # single-turn requests: "what about the refund?" means different things
+    # in different conversations.
+    if mode == "caching" and not history:
         hit = prompt_cache.get(prompt)
         if hit is not None:
             start = time.perf_counter()
@@ -83,26 +96,21 @@ async def chat(prompt: str, mode: str = "baseline", record: bool = True) -> Chat
         metrics = _build_metrics(result, mode)
 
     elif mode == "routing":
+        # Route on the newest message: that's what the next answer is about.
         route = get_router().classify(prompt)
-        result = await engine.generate(prompt, route["model_tier"])
-        metrics = _build_metrics(
-            result,
-            mode,
-            category=route["category"],
-            router_backend=route["backend"],
-            router_time_ms=route["route_time_ms"],
-        )
+        result = await engine.generate(prompt, route["model_tier"], history)
+        metrics = _build_metrics(result, mode, route=route, history_turns=turns)
 
     elif mode == "quantized":
         # Mock-only: a faster serving profile simulating an INT8/FP8
         # TensorRT-LLM engine. The API rejects this mode outside mock
         # because hosted NIM exposes no quantization toggle.
-        result = await engine.generate(prompt, "quantized")
-        metrics = _build_metrics(result, mode)
+        result = await engine.generate(prompt, "quantized", history)
+        metrics = _build_metrics(result, mode, history_turns=turns)
 
-    else:  # baseline
-        result = await engine.generate(prompt, "large")
-        metrics = _build_metrics(result, "baseline")
+    else:  # baseline, or caching with history (cache bypassed)
+        result = await engine.generate(prompt, "large", history)
+        metrics = _build_metrics(result, mode, history_turns=turns)
 
     if record:
         tracker.record(metrics)

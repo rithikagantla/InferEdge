@@ -13,7 +13,7 @@ Environment:
   LOCAL_SMALL_MODEL       traffic; without it both tiers hit LOCAL_MODEL,
                           so routing changes nothing in local mode
 """
-from typing import Optional
+from typing import List, Optional
 
 import httpx
 
@@ -45,10 +45,11 @@ class LocalEngine(OpenAICompatEngine):
     def max_concurrency(self) -> int:
         return config.LOCAL_MAX_CONCURRENCY
 
-    async def generate(self, prompt: str, model_tier: str = "large"):
+    async def generate(self, prompt: str, model_tier: str = "large",
+                       history: Optional[List[dict]] = None):
         if model_tier == "small" and self._small is not None:
-            return await self._small.generate(prompt, "small")
-        return await super().generate(prompt, model_tier)
+            return await self._small.generate(prompt, "small", history)
+        return await super().generate(prompt, model_tier, history)
 
 
 class _SingleModel(OpenAICompatEngine):

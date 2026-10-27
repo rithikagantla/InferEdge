@@ -172,3 +172,17 @@ def test_disables_thinking_by_default(monkeypatch):
     monkeypatch.setattr(config, "NIM_DISABLE_THINKING", False)
     asyncio.run(engine.generate("hi"))
     assert "chat_template_kwargs" not in bodies[-1]
+
+
+def test_history_is_sent_in_order():
+    bodies = []
+
+    def handler(request):
+        bodies.append(json.loads(request.content))
+        return httpx.Response(200, content=sse(delta("ok")))
+
+    history = [{"role": "user", "content": "first"}, {"role": "assistant", "content": "reply"}]
+    asyncio.run(make_engine(handler).generate("second", "large", history))
+    roles = [(m["role"], m["content"]) for m in bodies[-1]["messages"]]
+    assert roles[0][0] == "system"
+    assert roles[1:] == [("user", "first"), ("assistant", "reply"), ("user", "second")]

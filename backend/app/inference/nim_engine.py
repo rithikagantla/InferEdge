@@ -12,7 +12,7 @@ Environment:
   NIM_MAX_CONCURRENCY     — max in-flight requests (free tier is rate limited)
   NIM_MAX_RETRIES         — retries on 429 / 5xx / network errors
 """
-from typing import Optional
+from typing import List, Optional
 
 import httpx
 
@@ -41,8 +41,8 @@ class NIMEngine(OpenAICompatEngine):
             return config.NVIDIA_NIM_SMALL_MODEL
         return config.NVIDIA_NIM_MODEL
 
-    def _payload(self, prompt: str, model: str) -> dict:
-        payload = super()._payload(prompt, model)
+    def _payload(self, prompt: str, model: str, history: Optional[List[dict]] = None) -> dict:
+        payload = super()._payload(prompt, model, history)
         if config.NIM_DISABLE_THINKING:
             payload["chat_template_kwargs"] = {"enable_thinking": False}
         return payload

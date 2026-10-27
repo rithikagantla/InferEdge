@@ -40,7 +40,9 @@ class InferenceEngine(abc.ABC):
     name: str = "base"
 
     @abc.abstractmethod
-    async def generate(self, prompt: str, model_tier: str = "large") -> InferenceResult:
+    async def generate(self, prompt: str, model_tier: str = "large",
+                       history: Optional[List[dict]] = None) -> InferenceResult:
+        """history: earlier {"role", "content"} turns, oldest first."""
         ...
 
     async def generate_batch(

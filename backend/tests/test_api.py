@@ -172,3 +172,55 @@ def test_quantized_is_mock_only(client, monkeypatch):
 def test_sample_prompts(client):
     data = client.get("/sample-prompts").json()
     assert len(data["prompts"]) >= 20
+
+
+def test_chat_returns_calculation_fields(client):
+    data = client.post("/chat", json={"prompt": "I want a refund for my last order.",
+                                       "mode": "routing"}).json()
+    m = data["metrics"]
+    assert m["tier"] == "small"
+    assert m["input_price_per_1m"] > 0 and m["output_price_per_1m"] > 0
+    assert set(m["route_scores"]) == {"billing", "technical_support", "account_management",
+                                      "refund", "shipping", "human_escalation"}
+    assert 0 < m["route_confidence"] <= 1
+    expected = (m["input_tokens"] * m["input_price_per_1m"]
+                + m["output_tokens"] * m["output_price_per_1m"]) / 1e6
+    assert m["cost_usd"] == pytest.approx(expected, rel=1e-3)
+
+
+def test_chat_with_history_follows_topic_and_skips_cache(client):
+    service.prompt_cache.clear()
+    history = [{"role": "user", "content": "I was charged twice this month."},
+               {"role": "assistant", "content": "I'm sorry about the billing trouble."}]
+    first = client.post("/chat", json={"prompt": "Can you check again?", "mode": "caching",
+                                        "history": history}).json()
+    again = client.post("/chat", json={"prompt": "Can you check again?", "mode": "caching",
+                                        "history": history}).json()
+    assert "billing" in first["response"].lower() or "charge" in first["response"].lower()
+    assert first["metrics"]["history_turns"] == 2
+    assert first["metrics"]["cached"] is False and again["metrics"]["cached"] is False
+
+
+def test_chat_rejects_bad_history_role(client):
+    resp = client.post("/chat", json={"prompt": "hi", "history": [{"role": "system", "content": "x"}]})
+    assert resp.status_code == 422
+
+
+def test_config_endpoint(client):
+    data = client.get("/config").json()
+    assert data["inference_mode"] == "mock"
+    assert {"small", "large"} <= set(data["tiers"])
+    assert data["tiers"]["large"]["output_cost_per_1m"] > data["tiers"]["small"]["output_cost_per_1m"]
+    assert data["chat_modes"][0]["id"] == "routing"
+    assert "billing" in data["small_tier_categories"]
+
+
+def test_results_endpoint_serves_measured_data(client):
+    data = client.get("/results").json()
+    assert set(data) >= {"nim_benchmark", "nim_sweeps", "gpu_sweeps", "router_gpu",
+                         "router_embed", "routing_study"}
+    if data["gpu_sweeps"]:
+        sweep = data["gpu_sweeps"][0]
+        assert sweep["label"] and sweep["levels"][0]["concurrency"] == 1
+    if data["router_embed"]:
+        assert "misses" not in data["router_embed"]["accuracy"]["minilm"]
